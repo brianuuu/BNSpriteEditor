@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PaletteInfoWindow</class>
+ <widget class="QMainWindow" name="PaletteInfoWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>163</width>
+    <height>99</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>163</width>
+    <height>99</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>163</width>
+    <height>99</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string/>
+  </property>
+  <property name="iconSize">
+   <size>
+    <width>0</width>
+    <height>0</height>
+   </size>
+  </property>
+  <widget class="PaletteInfoWidget" name="PaletteWidget"/>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PaletteInfoWidget</class>
+   <extends>QWidget</extends>
+   <header>paletteinfowidget.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
