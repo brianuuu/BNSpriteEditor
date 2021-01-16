@@ -175,7 +175,7 @@ QPoint PaletteGraphicsView::getPixelPos(QPoint pos)
     return pos + QPoint(this->horizontalScrollBar()->value(), this->verticalScrollBar()->value());
 }
 
-void PaletteGraphicsView::enterEvent(QEvent *event)
+void PaletteGraphicsView::enterEvent(QEnterEvent *event)
 {
     m_timer->start(10);
 }
