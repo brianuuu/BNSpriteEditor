@@ -175,7 +175,11 @@ QPoint PaletteGraphicsView::getPixelPos(QPoint pos)
     return pos + QPoint(this->horizontalScrollBar()->value(), this->verticalScrollBar()->value());
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void PaletteGraphicsView::enterEvent(QEnterEvent *event)
+#else
 void PaletteGraphicsView::enterEvent(QEvent *event)
+#endif
 {
     m_timer->start(10);
 }
