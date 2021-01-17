@@ -894,8 +894,13 @@ bool BNSprite::LoadSF
     PaletteGroup palGrp;
     m_paletteGroups.push_back(palGrp);
     uint16_t colDepth = ReadShort(f);
-    uint16_t palSize = ReadShort(f);
-    if (colDepth != 5)
+    uint16_t palCountMax = ReadShort(f);
+    uint16_t palSize = 0;
+    if (colDepth == 5)
+    {
+        palSize = 0x10;
+    }
+    else
     {
         _errorMsg = "Unsupported color mode " + to_string(colDepth);
         return false;
