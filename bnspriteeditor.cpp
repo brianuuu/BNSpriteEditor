@@ -428,7 +428,10 @@ void BNSpriteEditor::on_actionExport_Sprite_as_Single_PNG_triggered()
         }
 
         QSize animSize = QSize(maxX - minX + 1 + borderSize * 2, maxY - minY + 1 + borderSize * 2);
-        imageSize += animSize;
+
+        // Add new animation height, get max width
+        imageSize.rheight() += animSize.height();
+        imageSize.setWidth(qMax(imageSize.width(), animSize.width() * (int)frames.size()));
 
         animSizes.push_back(animSize);
         animMins.push_back(QPoint(minX - borderSize, minY - borderSize));
@@ -834,7 +837,7 @@ void BNSpriteEditor::UpdateFrameImage(const BNSprite::Frame &_frame, QImage *_im
     {
         for (int x = 0; x < _image->width(); x++)
         {
-            _image->setPixel(x, y, 16);
+            _image->setPixel(x, y, palette.size() - 1);
         }
     }
 
@@ -1593,7 +1596,7 @@ void BNSpriteEditor::UpdateDrawTileset()
     {
         for (int x = 0; x < m_tilesetImage->width(); x++)
         {
-            m_tilesetImage->setPixel(x, y, 16);
+            m_tilesetImage->setPixel(x, y, palette.size() - 1);
         }
     }
 
@@ -2245,14 +2248,17 @@ void BNSpriteEditor::AddPaletteGroupFromSprite(const BNSprite::PaletteGroup &pal
     PaletteGroup groupCopy;
     for (BNSprite::Palette const& pal : paletteGroup.m_palettes)
     {
+        uint32_t const size = pal.m_colors.size();
+        Q_ASSERT(size == 16 || size == 256);
+
         Palette palCopy;
-        for (uint32_t i = 0; i < 16; i++)
+        for (uint32_t i = 0; i < size; i++)
         {
             uint16_t const& col = pal.m_colors[i];
             uint32_t rgb = BNSprite::GBAtoRGB(col);
             palCopy.push_back(rgb);
         }
-        palCopy.push_back(0);   // 16: transparency
+        palCopy.push_back(0);   // 16/256: transparency
         groupCopy.push_back(palCopy);
     }
     m_paletteGroups.push_back(groupCopy);
@@ -2836,7 +2842,7 @@ void BNSpriteEditor::UpdateOAMThumbnail(const BNSprite::SubObject &_subObject)
     {
         for (int x = 0; x < m_oamImage->width(); x++)
         {
-            m_oamImage->setPixel(x, y, 16);
+            m_oamImage->setPixel(x, y, palette.size() - 1);
         }
     }
 
@@ -2968,7 +2974,7 @@ void BNSpriteEditor::DrawPreviewOAM(QGraphicsPixmapItem *_graphicsItem, const BN
     {
         for (int x = 0; x < image.width(); x++)
         {
-            image.setPixel(x, y, 16);
+            image.setPixel(x, y, palette.size() - 1);
         }
     }
     DrawOAMInImage(_subObject, &image, _subObject.m_posX, _subObject.m_posY, m_tilesetData, false);
