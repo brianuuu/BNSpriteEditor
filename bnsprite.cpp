@@ -781,7 +781,6 @@ bool BNSprite::LoadSF
     std::cout << "Reading tilesets entries..." << endl;
     vector<TilesetInfo> tsetEntries;
     tsetEntries.reserve(spriteCount);
-    uint32_t tsetID = 0;
     for (size_t i = 0; i < spriteCount; i++)
     {
         TilesetInfo entry;
@@ -789,8 +788,10 @@ bool BNSprite::LoadSF
         entry.tileNum   = ReadShort(f);
 
         // Check for duplicate entries
-        auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const auto& x) {
-            return x.tileNum == entry.tileNum && x.tileCount == entry.tileCount; });
+        auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const auto& x)
+        {
+            return x.tileNum == entry.tileNum && x.tileCount == entry.tileCount;
+        });
         if (it != tsetEntries.end())
         {
             // Use existing ID
@@ -799,8 +800,8 @@ bool BNSprite::LoadSF
         else
         {
             // Create new ID
+            sprites[i].m_tilesetID = tsetEntries.size();
             tsetEntries.push_back(entry);
-            sprites[i].m_tilesetID = tsetID++;
         }
     }
 
