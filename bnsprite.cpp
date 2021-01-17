@@ -895,6 +895,11 @@ bool BNSprite::LoadSF
     m_paletteGroups.push_back(palGrp);
     uint16_t colDepth = ReadShort(f);
     uint16_t palSize = ReadShort(f);
+    if (colDepth != 5)
+    {
+        _errorMsg = "Unsupported color mode " + to_string(colDepth);
+        return false;
+    }
 
     // Figure out the end of the palettes block (probably animations...)
     long blockEnd = fileSize;
