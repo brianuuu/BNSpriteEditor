@@ -38,7 +38,9 @@ public:
 private slots:
     // Actions
     void on_actionImport_Sprite_triggered();
+    void on_actionImport_SF_Sprite_triggered();
     void on_actionExport_Sprite_triggered();
+    void on_actionExport_SF_Sprite_triggered();
     void on_actionClose_triggered();
     void on_actionSimple_Mode_triggered();
     void on_actionAdvanced_Mode_triggered();
@@ -151,6 +153,9 @@ private:
     void ResetOthers();
     void ResetOAM();
     void ResetSubFrame();
+
+    void ImportSprite(bool isSFSprite);
+    void ExportSprite(bool isSFSprite);
 
     // Thumbnails
     QImage* GetFrameImage(BNSprite::Frame const& _frame, bool _isThumbnail, int _subAnimID = 0, int _subFrameID = 0);

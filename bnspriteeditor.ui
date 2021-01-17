@@ -2259,7 +2259,9 @@
      <string>File</string>
     </property>
     <addaction name="actionImport_Sprite"/>
+    <addaction name="actionImport_SF_Sprite"/>
     <addaction name="actionExport_Sprite"/>
+    <addaction name="actionExport_SF_Sprite"/>
     <addaction name="actionClose"/>
    </widget>
    <widget class="QMenu" name="menuSprite">
@@ -2293,12 +2295,12 @@
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionImport_Sprite">
    <property name="text">
-    <string>Import Sprite...</string>
+    <string>Import BN Sprite...</string>
    </property>
   </action>
   <action name="actionExport_Sprite">
    <property name="text">
-    <string>Export Sprite...</string>
+    <string>Export BN Sprite...</string>
    </property>
   </action>
   <action name="actionClose">
@@ -2353,6 +2355,16 @@
   <action name="actionCustom_Sprite_Manager">
    <property name="text">
     <string>Custom Sprite Manager...</string>
+   </property>
+  </action>
+  <action name="actionImport_SF_Sprite">
+   <property name="text">
+    <string>Import SF Sprite...</string>
+   </property>
+  </action>
+  <action name="actionExport_SF_Sprite">
+   <property name="text">
+    <string>Export SF Sprite...</string>
    </property>
   </action>
  </widget>

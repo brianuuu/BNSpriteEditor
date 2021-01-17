@@ -2,7 +2,9 @@
 #include "ui_bnspriteeditor.h"
 
 #define IMPORT_EXTENSIONS "BN Sprite (*.bnsa *.bnsprite *.dmp);;All files (*.*)"
+#define IMPORT_EXTENSIONS_SF "SF Sprite (*.sfsa *.sfsprite *.bin);;All files (*.*)"
 #define EXPORT_EXTENSIONS "Memory Dump (*.dmp);;BN Sprite (*.bnsa *.bnsprite);;All files (*.*)"
+#define EXPORT_EXTENSIONS_SF "Memory Dump (*.bin);;SF Sprite (*.sfsa *.sfsprite);;All files (*.*)"
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -155,6 +157,16 @@ void BNSpriteEditor::closeEvent(QCloseEvent *event)
 //---------------------------------------------------------------------------
 void BNSpriteEditor::on_actionImport_Sprite_triggered()
 {
+    ImportSprite(false);
+}
+
+void BNSpriteEditor::on_actionImport_SF_Sprite_triggered()
+{
+    ImportSprite(true);
+}
+
+void BNSpriteEditor::ImportSprite(bool isSFSprite)
+{
     if (m_csm != Q_NULLPTR && m_csm->isVisible())
     {
         QMessageBox::warning(this, "Import Sprite", "Sprite import is not allowed while Custom Sprite Manager editing is active.", QMessageBox::Ok);
@@ -167,7 +179,7 @@ void BNSpriteEditor::on_actionImport_Sprite_triggered()
         path = m_path;
     }
 
-    QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, IMPORT_EXTENSIONS);
+    QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, isSFSprite ? IMPORT_EXTENSIONS_SF : IMPORT_EXTENSIONS);
     if (file == Q_NULLPTR) return;
 
     // Save directory
@@ -184,7 +196,17 @@ void BNSpriteEditor::on_actionImport_Sprite_triggered()
 
     // Load BN Sprite file
     string errorMsg;
-    if (!m_sprite.Load(file.toStdWString(), errorMsg))
+    bool success = false;
+    if (isSFSprite)
+    {
+        // TODO:
+    }
+    else
+    {
+        success = m_sprite.Load(file.toStdWString(), errorMsg);
+    }
+
+    if (!success)
     {
         QMessageBox::critical(this, "Error", QString::fromStdString(errorMsg), QMessageBox::Ok);
     }
@@ -220,6 +242,16 @@ void BNSpriteEditor::on_actionImport_Sprite_triggered()
 
 void BNSpriteEditor::on_actionExport_Sprite_triggered()
 {
+    ExportSprite(false);
+}
+
+void BNSpriteEditor::on_actionExport_SF_Sprite_triggered()
+{
+    ExportSprite(true);
+}
+
+void BNSpriteEditor::ExportSprite(bool isSFSprite)
+{
     if (!m_sprite.IsLoaded()) return;
     if (ui->Anim_LW->count() == 0) return;
 
@@ -229,7 +261,7 @@ void BNSpriteEditor::on_actionExport_Sprite_triggered()
         path = m_path;
     }
 
-    QString file = QFileDialog::getSaveFileName(this, tr("Export Sprite"), path + "/" + ui->Sprite_Name->text(), EXPORT_EXTENSIONS);
+    QString file = QFileDialog::getSaveFileName(this, tr("Export Sprite"), path + "/" + ui->Sprite_Name->text(), isSFSprite ? EXPORT_EXTENSIONS_SF : EXPORT_EXTENSIONS);
     if (file == Q_NULLPTR) return;
 
     // Save directory
@@ -244,6 +276,7 @@ void BNSpriteEditor::on_actionExport_Sprite_triggered()
         for (Palette const& pal : group)
         {
             BNSprite::Palette palCopy;
+            // TODO: 256 color support
             for (uint32_t i = 0; i < 16; i++)
             {
                 uint32_t const& rgb = pal[i];
@@ -258,7 +291,17 @@ void BNSpriteEditor::on_actionExport_Sprite_triggered()
 
     // Save BN sprite file
     string errorMsg;
-    if (!m_sprite.Save(file.toStdWString(), errorMsg))
+    bool success = false;
+    if (isSFSprite)
+    {
+        // TODO:
+    }
+    else
+    {
+        success = m_sprite.Save(file.toStdWString(), errorMsg);
+    }
+
+    if (!success)
     {
         QMessageBox::critical(this, "Error", QString::fromStdString(errorMsg), QMessageBox::Ok);
     }
