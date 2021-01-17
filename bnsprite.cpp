@@ -896,9 +896,24 @@ bool BNSprite::LoadSF
     uint16_t colDepth = ReadShort(f);
     uint16_t palSize = ReadShort(f);
 
+    // Figure out the end of the palettes block (probably animations...)
+    long blockEnd = fileSize;
+    if (tsetHdrOffs > palsHdrOffs && (long)tsetHdrOffs < blockEnd)
+    {
+        blockEnd = tsetHdrOffs;
+    }
+    if (animHdrOffs > palsHdrOffs && (long)animHdrOffs < blockEnd)
+    {
+        blockEnd = animHdrOffs;
+    }
+    if (sprsHdrOffs > palsHdrOffs && (long)sprsHdrOffs < blockEnd)
+    {
+        blockEnd = sprsHdrOffs;
+    }
+
     // Read palettes
     std::cout << "Reading palettes..." << endl;
-    for (size_t i = 0; i < palCount; i++)
+    for (size_t i = 0; i < palCount || ftell(f) < blockEnd; i++)
     {
         Palette pal;
         for (size_t j = 0; j < palSize; j++)
