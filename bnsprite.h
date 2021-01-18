@@ -13,7 +13,7 @@ class BNSprite
 public:
     struct SubObject
     {
-        uint8_t m_startTile;
+        uint16_t m_startTile;
         int8_t m_posX;
         int8_t m_posY;
         bool m_hFlip;
@@ -117,7 +117,8 @@ public:
     void Clear();
 
     // Load & Save
-    bool Load(wstring const& _fileName, string& _errorMsg);
+    bool LoadBN(wstring const& _fileName, string& _errorMsg);
+    bool LoadSF(wstring const& _fileName, string& _errorMsg);
     bool Save(wstring const& _fileName, string& _errorMsg);
 
     // Merge with another sprite

@@ -199,11 +199,11 @@ void BNSpriteEditor::ImportSprite(bool isSFSprite)
     bool success = false;
     if (isSFSprite)
     {
-        // TODO:
+        success = m_sprite.LoadSF(file.toStdWString(), errorMsg);
     }
     else
     {
-        success = m_sprite.Load(file.toStdWString(), errorMsg);
+        success = m_sprite.LoadBN(file.toStdWString(), errorMsg);
     }
 
     if (!success)
@@ -377,7 +377,7 @@ void BNSpriteEditor::on_actionMerge_Sprite_triggered()
 
     // Load BN Sprite file
     string errorMsg;
-    if (!m_spriteMerge.Load(file.toStdWString(), errorMsg))
+    if (!m_spriteMerge.LoadBN(file.toStdWString(), errorMsg))
     {
         QMessageBox::critical(this, "Error", QString::fromStdString(errorMsg), QMessageBox::Ok);
     }

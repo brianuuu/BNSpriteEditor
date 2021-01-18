@@ -45,7 +45,7 @@ void BNSprite::Clear()
 //-----------------------------------------------------
 // Load a sprite file, return false if fail
 //-----------------------------------------------------
-bool BNSprite::Load
+bool BNSprite::LoadBN
 (
     wstring const& _fileName,
     string& _errorMsg
@@ -643,6 +643,268 @@ bool BNSprite::Load
         }
 
         m_paletteGroups.push_back(group);
+    }
+
+    fclose(f);
+    m_loaded = true;
+    return true;
+}
+
+bool BNSprite::LoadSF
+(
+    wstring const& _fileName,
+    string& _errorMsg
+)
+{
+    typedef struct
+    {
+        uint16_t tileNum;
+        uint16_t tileCount;
+    } TilesetInfo;
+
+    Clear();
+
+    FILE* f;
+    _wfopen_s(&f, _fileName.c_str(), L"rb");
+    if (!f)
+    {
+        _errorMsg = "Unable to open file!";
+        fclose(f);
+        return false;
+    }
+
+    // File size
+    fseek(f, 0, SEEK_END);
+    uint32_t fileSize = ftell(f);
+
+    // Read file header
+    fseek(f, 0, SEEK_SET);
+    uint32_t tsetHdrOffs = ReadInt(f);
+    uint32_t palsHdrOffs = ReadInt(f);
+    uint32_t animHdrOffs = ReadInt(f);
+    uint32_t sprsHdrOffs = ReadInt(f);
+    uint32_t tnumShift   = ReadInt(f);
+
+    uint16_t palCount = 0;
+
+    // Read sprites header
+    std::cout << "Reading sprites header..." << endl;
+    fseek(f, sprsHdrOffs, SEEK_SET);
+    uint16_t spriteCount = ReadShort(f);
+    fseek(f, 2, SEEK_CUR); // skip padding (?)
+
+    // Read sprite pointers
+    std::cout << "Reading sprite pointers..." << endl;
+    vector<uint32_t> spritePtrs;
+    vector<Frame> sprites;
+    vector<bool> spriteUsed;
+    spritePtrs.reserve(spriteCount);
+    sprites.reserve(spriteCount);
+    spriteUsed.reserve(spriteCount);
+    for (size_t i = 0; i < spriteCount; i++)
+    {
+        uint32_t ptr = ReadInt(f) + sprsHdrOffs;
+        spritePtrs.push_back(ptr);
+    }
+
+    // Read sprites
+    std::cout << "Reading sprites..." << endl;
+    for (size_t i = 0; i < spriteCount; i++)
+    {
+        fseek(f, spritePtrs[i], SEEK_SET);
+        Frame sprite;
+
+        // Read objects
+        Object obj;
+        bool last = false;
+        do
+        {
+            SubObject subObj;
+            subObj.m_startTile = ReadByte(f) << tnumShift;
+            subObj.m_posX = (int8_t)ReadByte(f);
+            subObj.m_posY = (int8_t)ReadByte(f);
+
+            uint8_t size = ReadByte(f);
+            uint8_t shape = ReadByte(f);
+            uint8_t sizeShape = ((size & 0x3) << 0x4) | (shape & 0x3);
+            switch (sizeShape)
+            {
+            case 0x00: subObj.m_sizeX =  8; subObj.m_sizeY =  8; break;
+            case 0x01: subObj.m_sizeX = 16; subObj.m_sizeY =  8; break;
+            case 0x02: subObj.m_sizeX =  8; subObj.m_sizeY = 16; break;
+            case 0x10: subObj.m_sizeX = 16; subObj.m_sizeY = 16; break;
+            case 0x11: subObj.m_sizeX = 32; subObj.m_sizeY =  8; break;
+            case 0x12: subObj.m_sizeX =  8; subObj.m_sizeY = 32; break;
+            case 0x20: subObj.m_sizeX = 32; subObj.m_sizeY = 32; break;
+            case 0x21: subObj.m_sizeX = 32; subObj.m_sizeY = 16; break;
+            case 0x22: subObj.m_sizeX = 16; subObj.m_sizeY = 32; break;
+            case 0x30: subObj.m_sizeX = 64; subObj.m_sizeY = 64; break;
+            case 0x31: subObj.m_sizeX = 64; subObj.m_sizeY = 32; break;
+            case 0x32: subObj.m_sizeX = 32; subObj.m_sizeY = 64; break;
+            }
+
+            uint8_t flip = ReadByte(f);
+            subObj.m_hFlip = flip & 0x1;
+            subObj.m_vFlip = flip & 0x2;
+
+            last = ReadByte(f);
+
+            subObj.m_startTile += (ReadByte(f) << 8);
+
+            obj.m_subObjects.push_back(subObj);
+        }
+        while (!last);
+        sprite.m_objects.push_back(obj);
+
+        // Create dummy subanimation
+        SubFrame subFrame;
+        SubAnimation subAnim;
+        subFrame.m_objectIndex = 0;
+        subFrame.m_delay = 1;
+        subAnim.m_loop = true;
+        subAnim.m_subFrames.push_back(subFrame);
+        sprite.m_subAnimations.push_back(subAnim);
+
+        sprites.push_back(sprite);
+        spriteUsed.push_back(false);
+    }
+
+    // Read tilesets header
+    std::cout << "Reading tilesets header..." << endl;
+    fseek(f, tsetHdrOffs, SEEK_SET);
+    uint16_t maxTileCount = ReadShort(f);
+    uint16_t totalTileCount = ReadShort(f);
+    uint16_t tsetHdrSize = ReadShort(f);
+    fseek(f, 2, SEEK_CUR); // skip padding (?)
+
+    // Read tilesets entries
+    std::cout << "Reading tilesets entries..." << endl;
+    vector<TilesetInfo> tsetEntries;
+    tsetEntries.reserve(spriteCount);
+    uint32_t tsetID = 0;
+    for (size_t i = 0; i < spriteCount; i++)
+    {
+        TilesetInfo entry;
+        entry.tileCount = ReadShort(f);
+        entry.tileNum   = ReadShort(f);
+
+        // Check for duplicate entries
+        auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const auto& x) {
+            return x.tileNum == entry.tileNum && x.tileCount == entry.tileCount; });
+        if (it != tsetEntries.end())
+        {
+            // Use existing ID
+            sprites[i].m_tilesetID = it - tsetEntries.begin();
+        }
+        else
+        {
+            // Create new ID
+            tsetEntries.push_back(entry);
+            sprites[i].m_tilesetID = tsetID++;
+        }
+    }
+
+    // Read tilesets
+    std::cout << "Reading tilesets..." << endl;
+    for (auto tsetEntry : tsetEntries)
+    {
+        fseek(f, tsetHdrOffs + tsetHdrSize + tsetEntry.tileNum * 0x20, SEEK_SET);
+
+        Tileset tset;
+        uint32_t tsetSize = tsetEntry.tileCount * 0x20;
+        tset.m_data.reserve(tsetSize);
+
+        for (uint32_t i = 0; i < tsetSize; i++)
+        {
+            tset.m_data.push_back(ReadByte(f));
+        }
+        m_tilesets.push_back(tset);
+    }
+
+    // Read animations
+    std::cout << "Reading animations header..." << endl;
+    fseek(f, animHdrOffs, SEEK_SET);
+    uint16_t animCount = ReadShort(f);
+    fseek(f, 2, SEEK_CUR); // skip padding (?)
+
+    // Read animation pointers
+    std::cout << "Reading animation pointers..." << endl;
+    vector<uint32_t> animPtrs;
+    animPtrs.reserve(animCount);
+    for (size_t i = 0; i < animCount; i++)
+    {
+        uint32_t ptr = ReadInt(f) + animHdrOffs;
+        animPtrs.push_back(ptr);
+    }
+
+    // Read animations
+    std::cout << "Reading animations..." << endl;
+    m_animations.reserve(animCount);
+    for (auto animPtr : animPtrs)
+    {
+        fseek(f, animPtr, SEEK_SET);
+
+        Animation anim;
+        uint8_t loop;
+        do
+        {
+            uint8_t sprIdx = ReadByte(f);
+            uint8_t delay = ReadByte(f);
+            loop = ReadByte(f);
+            uint8_t palIdx = ReadByte(f);
+
+            Frame frame = sprites[sprIdx];
+            frame.m_delay = delay;
+            frame.m_objects[0].m_paletteIndex = palIdx;
+            spriteUsed[sprIdx] = true;
+
+            if (palIdx >= palCount)
+            {
+                palCount = palIdx + 1;
+            }
+
+            anim.m_frames.push_back(frame);
+        }
+        while (!(loop & 0xC0));
+        anim.m_loop = loop & 0x40;
+
+        m_animations.push_back(anim);
+    }
+
+    // Make extra animation for all unused sprites
+    auto it = find(spriteUsed.begin(), spriteUsed.end(), false);
+    if (it != spriteUsed.end())
+    {
+        Animation anim;
+
+        for (size_t i = 0; i < spriteCount; i++)
+        {
+            if (spriteUsed[i]) continue;
+
+            anim.m_frames.push_back(sprites[i]);
+        }
+
+        m_animations.push_back(anim);
+    }
+
+    // Read palettes header
+    std::cout << "Reading palettes header..." << endl;
+    fseek(f, palsHdrOffs, SEEK_SET);
+    PaletteGroup palGrp;
+    m_paletteGroups.push_back(palGrp);
+    uint16_t colDepth = ReadShort(f);
+    uint16_t palSize = ReadShort(f);
+
+    // Read palettes
+    std::cout << "Reading palettes..." << endl;
+    for (size_t i = 0; i < palCount; i++)
+    {
+        Palette pal;
+        for (size_t j = 0; j < palSize; j++)
+        {
+            pal.m_colors.push_back(ReadShort(f));
+        }
+        m_paletteGroups[0].m_palettes.push_back(pal);
     }
 
     fclose(f);
