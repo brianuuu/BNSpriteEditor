@@ -1408,12 +1408,10 @@ bool BNSprite::SaveSF
         uint16_t tileCount;
     } TilesetInfo;
 
-    FILE* f;
-    _wfopen_s(&f, _fileName.c_str(), L"wb");
-    if (!f)
+    // Check multiple palette groups
+    if (m_paletteGroups.size() > 1)
     {
-        _errorMsg = "Unable to open file!";
-        fclose(f);
+        _errorMsg = "SF sprite does not support multiple palette groups";
         return false;
     }
 
@@ -1429,13 +1427,31 @@ bool BNSprite::SaveSF
     tsetEntries.reserve(m_tilesets.size());
     size_t tsetSizeMax = 0;
     size_t tsetSizeTotal = 0;
-    for (Animation anim : m_animations)
+    for (size_t i = 0; i < m_animations.size(); i++)
     {
+        Animation anim = m_animations[i];
         vector<size_t> animSpriteIdxes;
         animSpriteIdxes.reserve(anim.m_frames.size());
 
-        for (Frame frame : anim.m_frames)
+        for (size_t j = 0; j < anim.m_frames.size(); j++)
         {
+            Frame frame = anim.m_frames[j];
+
+            // Check if sprite is valid for SF
+            if (frame.m_subAnimations.size() > 1 ||
+                frame.m_subAnimations[0].m_subFrames.size() > 1)
+            {
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ":"
+                          + "SF sprite does not support sub animations";
+                return false;
+            }
+            if (frame.m_objects.size() > 1)
+            {
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ":"
+                          + "SF sprite does not support multiple object lists";
+                return false;
+            }
+
             // New tileset to be added
             if (tsetIdxes[frame.m_tilesetID] == -1)
             {
@@ -1523,7 +1539,16 @@ bool BNSprite::SaveSF
     }
     if (sprites.size() > 0xFF)
     {
-        _errorMsg = "Cannot have more than 255 unique sprites. This file has " + to_string(sprites.size()) + ".";
+        _errorMsg = "SF cannot have more than 255 unique sprites. This file has " + to_string(sprites.size()) + ".";
+        return false;
+    }
+
+    FILE* f;
+    _wfopen_s(&f, _fileName.c_str(), L"wb");
+    if (!f)
+    {
+        _errorMsg = "Unable to open file!";
+        fclose(f);
         return false;
     }
 
