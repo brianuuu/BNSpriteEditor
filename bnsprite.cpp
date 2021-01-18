@@ -769,6 +769,58 @@ bool BNSprite::LoadSF
         spriteUsed.push_back(false);
     }
 
+    // Read palettes header
+    std::cout << "Reading palettes header..." << endl;
+    fseek(f, palsHdrOffs, SEEK_SET);
+    PaletteGroup palGrp;
+    m_paletteGroups.push_back(palGrp);
+    uint16_t colDepth = ReadShort(f);
+    uint16_t palCountMax = ReadShort(f);
+    uint16_t palSize = 0;
+    uint32_t tileSize = 0;
+    if (colDepth == 5)
+    {
+        palSize = 16;
+        tileSize = 0x20;
+    }
+    //else if (colDepth == 6)
+    //{
+    //    palSize = 256;
+    //    tileSize = 0x40;
+    //}
+    else
+    {
+        _errorMsg = "Unsupported color mode " + to_string(colDepth);
+        return false;
+    }
+
+    // Figure out the end of the palettes block (probably animations...)
+    long blockEnd = fileSize;
+    if (tsetHdrOffs > palsHdrOffs && (long)tsetHdrOffs < blockEnd)
+    {
+        blockEnd = tsetHdrOffs;
+    }
+    if (animHdrOffs > palsHdrOffs && (long)animHdrOffs < blockEnd)
+    {
+        blockEnd = animHdrOffs;
+    }
+    if (sprsHdrOffs > palsHdrOffs && (long)sprsHdrOffs < blockEnd)
+    {
+        blockEnd = sprsHdrOffs;
+    }
+
+    // Read palettes
+    std::cout << "Reading palettes..." << endl;
+    for (size_t i = 0; i < palCount || ftell(f) < blockEnd; i++)
+    {
+        Palette pal;
+        for (size_t j = 0; j < palSize; j++)
+        {
+            pal.m_colors.push_back(ReadShort(f));
+        }
+        m_paletteGroups[0].m_palettes.push_back(pal);
+    }
+
     // Read tilesets header
     std::cout << "Reading tilesets header..." << endl;
     fseek(f, tsetHdrOffs, SEEK_SET);
@@ -812,7 +864,7 @@ bool BNSprite::LoadSF
         fseek(f, tsetHdrOffs + tsetHdrSize + tsetEntry.tileNum * 0x20, SEEK_SET);
 
         Tileset tset;
-        uint32_t tsetSize = tsetEntry.tileCount * 0x20;
+        uint32_t tsetSize = tsetEntry.tileCount * tileSize;
         tset.m_data.reserve(tsetSize);
 
         for (uint32_t i = 0; i < tsetSize; i++)
@@ -886,51 +938,6 @@ bool BNSprite::LoadSF
         }
 
         m_animations.push_back(anim);
-    }
-
-    // Read palettes header
-    std::cout << "Reading palettes header..." << endl;
-    fseek(f, palsHdrOffs, SEEK_SET);
-    PaletteGroup palGrp;
-    m_paletteGroups.push_back(palGrp);
-    uint16_t colDepth = ReadShort(f);
-    uint16_t palCountMax = ReadShort(f);
-    uint16_t palSize = 0;
-    if (colDepth == 5)
-    {
-        palSize = 0x10;
-    }
-    else
-    {
-        _errorMsg = "Unsupported color mode " + to_string(colDepth);
-        return false;
-    }
-
-    // Figure out the end of the palettes block (probably animations...)
-    long blockEnd = fileSize;
-    if (tsetHdrOffs > palsHdrOffs && (long)tsetHdrOffs < blockEnd)
-    {
-        blockEnd = tsetHdrOffs;
-    }
-    if (animHdrOffs > palsHdrOffs && (long)animHdrOffs < blockEnd)
-    {
-        blockEnd = animHdrOffs;
-    }
-    if (sprsHdrOffs > palsHdrOffs && (long)sprsHdrOffs < blockEnd)
-    {
-        blockEnd = sprsHdrOffs;
-    }
-
-    // Read palettes
-    std::cout << "Reading palettes..." << endl;
-    for (size_t i = 0; i < palCount || ftell(f) < blockEnd; i++)
-    {
-        Palette pal;
-        for (size_t j = 0; j < palSize; j++)
-        {
-            pal.m_colors.push_back(ReadShort(f));
-        }
-        m_paletteGroups[0].m_palettes.push_back(pal);
     }
 
     fclose(f);
