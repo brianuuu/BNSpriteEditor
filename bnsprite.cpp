@@ -660,6 +660,7 @@ bool BNSprite::LoadSF
     {
         uint16_t tileNum;
         uint16_t tileCount;
+        uint32_t fromSprite;
     } TilesetInfo;
 
     Clear();
@@ -679,17 +680,53 @@ bool BNSprite::LoadSF
 
     // Read file header
     fseek(f, 0, SEEK_SET);
+    if (fileSize - ftell(f) < 0x14)
+    {
+        _errorMsg = "Incomplete file header";
+        fclose(f);
+        return false;
+    }
     uint32_t tsetHdrOffs = ReadInt(f);
     uint32_t palsHdrOffs = ReadInt(f);
     uint32_t animHdrOffs = ReadInt(f);
     uint32_t sprsHdrOffs = ReadInt(f);
     uint32_t tnumShift   = ReadInt(f);
+    if (tsetHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for tilesets segment";
+        fclose(f);
+        return false;
+    }
+    if (palsHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for palettes segment";
+        fclose(f);
+        return false;
+    }
+    if (animHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for animations segment";
+        fclose(f);
+        return false;
+    }
+    if (sprsHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for sprites segment";
+        fclose(f);
+        return false;
+    }
 
     uint16_t palCount = 0;
 
     // Read sprites header
     std::cout << "Reading sprites header..." << endl;
     fseek(f, sprsHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 4)
+    {
+        _errorMsg = "Incomplete sprites header";
+        fclose(f);
+        return false;
+    }
     uint16_t spriteCount = ReadShort(f);
     fseek(f, 2, SEEK_CUR); // skip padding (?)
 
@@ -703,7 +740,21 @@ bool BNSprite::LoadSF
     spriteUsed.reserve(spriteCount);
     for (size_t i = 0; i < spriteCount; i++)
     {
+        if (fileSize - ftell(f) < 0x4)
+        {
+            _errorMsg = "Missing sprite pointer for sprite " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
         uint32_t ptr = ReadInt(f) + sprsHdrOffs;
+        if (ptr > fileSize)
+        {
+            _errorMsg = "Invalid sprite pointer for sprite " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
         spritePtrs.push_back(ptr);
     }
 
@@ -719,6 +770,13 @@ bool BNSprite::LoadSF
         bool last = false;
         do
         {
+            if (fileSize - ftell(f) < 0x8)
+            {
+                _errorMsg = "Object list for sprite " + to_string(i) + " ended prematurely";
+                fclose(f);
+                return false;
+            }
+
             SubObject subObj;
             subObj.m_startTile = ReadByte(f) << tnumShift;
             subObj.m_posX = (int8_t)ReadByte(f);
@@ -772,6 +830,12 @@ bool BNSprite::LoadSF
     // Read palettes header
     std::cout << "Reading palettes header..." << endl;
     fseek(f, palsHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x4)
+    {
+        _errorMsg = "Incomplete palettes header";
+        fclose(f);
+        return false;
+    }
     PaletteGroup palGrp;
     m_paletteGroups.push_back(palGrp);
     uint16_t colDepth = ReadShort(f);
@@ -813,6 +877,13 @@ bool BNSprite::LoadSF
     std::cout << "Reading palettes..." << endl;
     for (size_t i = 0; i < palCount || ftell(f) < blockEnd; i++)
     {
+        if (fileSize - ftell(f) < palSize * 0x2)
+        {
+            _errorMsg = "Palette " + to_string(i) + " ended prematurely";
+            fclose(f);
+            return false;
+        }
+
         Palette pal;
         for (size_t j = 0; j < palSize; j++)
         {
@@ -824,6 +895,12 @@ bool BNSprite::LoadSF
     // Read tilesets header
     std::cout << "Reading tilesets header..." << endl;
     fseek(f, tsetHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x8)
+    {
+        _errorMsg = "Incomplete tilesets header";
+        fclose(f);
+        return false;
+    }
     uint16_t maxTileCount = ReadShort(f);
     uint16_t totalTileCount = ReadShort(f);
     uint16_t tsetHdrSize = ReadShort(f);
@@ -835,9 +912,17 @@ bool BNSprite::LoadSF
     tsetEntries.reserve(spriteCount);
     for (size_t i = 0; i < spriteCount; i++)
     {
+        if (fileSize - ftell(f) < 0x4)
+        {
+            _errorMsg = "Incomplete tileset entry for sprite " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
         TilesetInfo entry;
-        entry.tileCount = ReadShort(f);
-        entry.tileNum   = ReadShort(f);
+        entry.tileCount  = ReadShort(f);
+        entry.tileNum    = ReadShort(f);
+        entry.fromSprite = i;
 
         // Check for duplicate entries
         auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const auto& x)
@@ -859,15 +944,30 @@ bool BNSprite::LoadSF
 
     // Read tilesets
     std::cout << "Reading tilesets..." << endl;
-    for (auto tsetEntry : tsetEntries)
+    for (size_t i = 0; i < tsetEntries.size(); i++)
     {
-        fseek(f, tsetHdrOffs + tsetHdrSize + tsetEntry.tileNum * 0x20, SEEK_SET);
+        TilesetInfo tsetEntry = tsetEntries[i];
+        uint32_t tsetPtr = tsetHdrOffs + tsetHdrSize + tsetEntry.tileNum * tileSize;
+        if (tsetPtr > fileSize)
+        {
+            _errorMsg = "Invalid tile offset for sprite " + to_string(tsetEntry.fromSprite);
+            fclose(f);
+            return false;
+        }
+        fseek(f, tsetPtr, SEEK_SET);
 
         Tileset tset;
         uint32_t tsetSize = tsetEntry.tileCount * tileSize;
         tset.m_data.reserve(tsetSize);
 
-        for (uint32_t i = 0; i < tsetSize; i++)
+        if (fileSize - ftell(f) < tsetSize)
+        {
+            _errorMsg = "Incomplete tileset for sprite " + to_string(tsetEntry.fromSprite);
+            fclose(f);
+            return false;
+        }
+
+        for (uint32_t j = 0; j < tsetSize; j++)
         {
             tset.m_data.push_back(ReadByte(f));
         }
@@ -877,6 +977,12 @@ bool BNSprite::LoadSF
     // Read animations
     std::cout << "Reading animations header..." << endl;
     fseek(f, animHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x4)
+    {
+        _errorMsg = "Incomplete animations header";
+        fclose(f);
+        return false;
+    }
     uint16_t animCount = ReadShort(f);
     fseek(f, 2, SEEK_CUR); // skip padding (?)
 
@@ -886,21 +992,42 @@ bool BNSprite::LoadSF
     animPtrs.reserve(animCount);
     for (size_t i = 0; i < animCount; i++)
     {
+        if (fileSize - ftell(f) < 0x4)
+        {
+            _errorMsg = "Missing animation pointer for animation " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
         uint32_t ptr = ReadInt(f) + animHdrOffs;
+        if (ptr > fileSize)
+        {
+            _errorMsg = "Invalid animation pointer for animation " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
         animPtrs.push_back(ptr);
     }
 
     // Read animations
     std::cout << "Reading animations..." << endl;
     m_animations.reserve(animCount);
-    for (auto animPtr : animPtrs)
+    for (size_t i = 0; i < animCount; i++)
     {
-        fseek(f, animPtr, SEEK_SET);
+        fseek(f, animPtrs[i], SEEK_SET);
 
         Animation anim;
         uint8_t loop;
         do
         {
+            if (fileSize - ftell(f) < 0x4)
+            {
+                _errorMsg = "Animation " + to_string(i) + " ended prematurely";
+                fclose(f);
+                return false;
+            }
+
             uint8_t sprIdx = ReadByte(f);
             uint8_t delay = ReadByte(f);
             loop = ReadByte(f);
