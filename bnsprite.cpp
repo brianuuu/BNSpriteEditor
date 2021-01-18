@@ -716,8 +716,6 @@ bool BNSprite::LoadSF
         return false;
     }
 
-    uint16_t palCount = 0;
-
     // Read sprites header
     std::cout << "Reading sprites header..." << endl;
     fseek(f, sprsHdrOffs, SEEK_SET);
@@ -799,6 +797,10 @@ bool BNSprite::LoadSF
             case 0x30: subObj.m_sizeX = 64; subObj.m_sizeY = 64; break;
             case 0x31: subObj.m_sizeX = 64; subObj.m_sizeY = 32; break;
             case 0x32: subObj.m_sizeX = 32; subObj.m_sizeY = 64; break;
+            default:
+                _errorMsg = "Invalid size/shape combination in sprite " + to_string(i) + " object " + to_string(obj.m_subObjects.size());
+                fclose(f);
+                return false;
             }
 
             uint8_t flip = ReadByte(f);
@@ -807,7 +809,7 @@ bool BNSprite::LoadSF
 
             last = ReadByte(f);
 
-            subObj.m_startTile += (ReadByte(f) << 8);
+            subObj.m_startTile += (ReadByte(f) << (8 + tnumShift));
 
             obj.m_subObjects.push_back(subObj);
         }
@@ -875,7 +877,7 @@ bool BNSprite::LoadSF
 
     // Read palettes
     std::cout << "Reading palettes..." << endl;
-    for (size_t i = 0; i < palCount || ftell(f) < blockEnd; i++)
+    for (size_t i = 0; ftell(f) < blockEnd; i++)
     {
         if (fileSize - ftell(f) < palSize * 0x2)
         {
@@ -1038,9 +1040,11 @@ bool BNSprite::LoadSF
             frame.m_objects[0].m_paletteIndex = palIdx;
             spriteUsed[sprIdx] = true;
 
-            if (palIdx >= palCount)
+            if (palIdx >= m_paletteGroups[0].m_palettes.size())
             {
-                palCount = palIdx + 1;
+                _errorMsg = "Invalid palette index for animation " + to_string(i) + " frame " + to_string(anim.m_frames.size());
+                fclose(f);
+                return false;
             }
 
             anim.m_frames.push_back(frame);
