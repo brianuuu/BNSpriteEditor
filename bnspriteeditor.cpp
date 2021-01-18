@@ -294,11 +294,11 @@ void BNSpriteEditor::ExportSprite(bool isSFSprite)
     bool success = false;
     if (isSFSprite)
     {
-        // TODO:
+        success = m_sprite.SaveSF(file.toStdWString(), errorMsg);
     }
     else
     {
-        success = m_sprite.Save(file.toStdWString(), errorMsg);
+        success = m_sprite.SaveBN(file.toStdWString(), errorMsg);
     }
 
     if (!success)

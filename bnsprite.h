@@ -119,7 +119,8 @@ public:
     // Load & Save
     bool LoadBN(wstring const& _fileName, string& _errorMsg);
     bool LoadSF(wstring const& _fileName, string& _errorMsg);
-    bool Save(wstring const& _fileName, string& _errorMsg);
+    bool SaveBN(wstring const& _fileName, string& _errorMsg);
+    bool SaveSF(wstring const& _fileName, string& _errorMsg);
 
     // Merge with another sprite
     bool Merge(BNSprite const& _other, string& _errorMsg);
