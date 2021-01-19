@@ -14,7 +14,7 @@ ZoomGraphicsView::ZoomGraphicsView(QWidget *parent) : QGraphicsView(parent)
 
 void ZoomGraphicsView::wheelEvent(QWheelEvent *event)
 {
-    int numDegrees = event->delta() / 8;
+    int numDegrees = event->angleDelta().y() / 8;
     int numSteps = numDegrees / 15; // see QWheelEvent documentation
     m_numScheduledScalings += numSteps;
     /*if (m_numScheduledScalings * numSteps < 0)
