@@ -373,65 +373,29 @@ bool BNSprite::LoadBN
                         }
                         else
                         {
-                            SubObject subObject;
-                            subObject.m_startTile = buffer[0];
-                            subObject.m_posX = static_cast<int8_t>(buffer[1]);
-                            subObject.m_posY = static_cast<int8_t>(buffer[2]);
-                            subObject.m_hFlip = buffer[3] & 0x40;
-                            subObject.m_vFlip = buffer[3] & 0x80;
+                            SubObject subObj;
+                            subObj.m_startTile = buffer[0];
+                            subObj.m_posX = static_cast<int8_t>(buffer[1]);
+                            subObj.m_posY = static_cast<int8_t>(buffer[2]);
+                            subObj.m_hFlip = buffer[3] & 0x40;
+                            subObj.m_vFlip = buffer[3] & 0x80;
                             object.m_paletteIndex = buffer[4] >> 4;
 
                             uint8_t sizeShape = ((buffer[3] & 0x03) << 0x04) | (buffer[4] & 0x03);
                             switch (sizeShape)
                             {
-                            case 0x00:
-                                subObject.m_sizeX = 8;
-                                subObject.m_sizeY = 8;
-                                break;
-                            case 0x01:
-                                subObject.m_sizeX = 16;
-                                subObject.m_sizeY = 8;
-                                break;
-                            case 0x02:
-                                subObject.m_sizeX = 8;
-                                subObject.m_sizeY = 16;
-                                break;
-                            case 0x10:
-                                subObject.m_sizeX = 16;
-                                subObject.m_sizeY = 16;
-                                break;
-                            case 0x11:
-                                subObject.m_sizeX = 32;
-                                subObject.m_sizeY = 8;
-                                break;
-                            case 0x12:
-                                subObject.m_sizeX = 8;
-                                subObject.m_sizeY = 32;
-                                break;
-                            case 0x20:
-                                subObject.m_sizeX = 32;
-                                subObject.m_sizeY = 32;
-                                break;
-                            case 0x21:
-                                subObject.m_sizeX = 32;
-                                subObject.m_sizeY = 16;
-                                break;
-                            case 0x22:
-                                subObject.m_sizeX = 16;
-                                subObject.m_sizeY = 32;
-                                break;
-                            case 0x30:
-                                subObject.m_sizeX = 64;
-                                subObject.m_sizeY = 64;
-                                break;
-                            case 0x31:
-                                subObject.m_sizeX = 64;
-                                subObject.m_sizeY = 32;
-                                break;
-                            case 0x32:
-                                subObject.m_sizeX = 32;
-                                subObject.m_sizeY = 64;
-                                break;
+                            case 0x00: subObj.m_sizeX = 8;  subObj.m_sizeY = 8;  break;
+                            case 0x01: subObj.m_sizeX = 16; subObj.m_sizeY = 8;  break;
+                            case 0x02: subObj.m_sizeX = 8;  subObj.m_sizeY = 16; break;
+                            case 0x10: subObj.m_sizeX = 16; subObj.m_sizeY = 16; break;
+                            case 0x11: subObj.m_sizeX = 32; subObj.m_sizeY = 8;  break;
+                            case 0x12: subObj.m_sizeX = 8;  subObj.m_sizeY = 32; break;
+                            case 0x20: subObj.m_sizeX = 32; subObj.m_sizeY = 32; break;
+                            case 0x21: subObj.m_sizeX = 32; subObj.m_sizeY = 16; break;
+                            case 0x22: subObj.m_sizeX = 16; subObj.m_sizeY = 32; break;
+                            case 0x30: subObj.m_sizeX = 64; subObj.m_sizeY = 64; break;
+                            case 0x31: subObj.m_sizeX = 64; subObj.m_sizeY = 32; break;
+                            case 0x32: subObj.m_sizeX = 32; subObj.m_sizeY = 64; break;
                             default:
                                 _errorMsg = "Unexpected OAM dimension at address " + GetAddressString(ftell(f) - 5);
                                 fclose(f);
@@ -452,7 +416,7 @@ bool BNSprite::LoadBN
                                 return false;
                             }
 
-                            object.m_subObjects.push_back(subObject);
+                            object.m_subObjects.push_back(subObj);
                         }
                     }
                     frame.m_objects.push_back(object);
@@ -614,18 +578,28 @@ bool BNSprite::LoadBN
         {
             Palette palette;
             palette.m_colors.reserve(0x10);
+
+            bool mostSignificantBitSet = false;
             for (uint8_t j = 0; j < 0x10; j++)
             {
                 uint16_t color = ReadShort(f);
-                if (color & 0x8000)
+                // Check the 2nd color if the first bit is set (first color is transparent and we don't care)
+                if (j == 1)
                 {
-                    // Palette doesn't allow most significant bit set
-                    valid = false;
-                    break;
+                    mostSignificantBitSet = (color & 0x8000) > 0;
+                }
+
+                // Always accept first color
+                if (j == 0 || (mostSignificantBitSet == (color & 0x8000) > 0))
+                {
+                    // Filter out first bit
+                    palette.m_colors.push_back(color & 0x7FFF);
                 }
                 else
                 {
-                    palette.m_colors.push_back(color);
+                    // Only accept either all color has first bit set, or all doesn't
+                    valid = false;
+                    break;
                 }
             }
 
