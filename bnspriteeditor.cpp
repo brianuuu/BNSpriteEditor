@@ -6,6 +6,8 @@
 #define EXPORT_EXTENSIONS "Memory Dump (*.dmp);;BN Sprite (*.bnsa *.bnsprite);;All files (*.*)"
 #define EXPORT_EXTENSIONS_SF "Memory Dump (*.bin);;SF Sprite (*.sfsa *.sfsprite);;All files (*.*)"
 
+static const QString c_programVersion = "v0.3.0";
+
 //---------------------------------------------------------------------------
 // Constructor
 //---------------------------------------------------------------------------
@@ -16,6 +18,7 @@ BNSpriteEditor::BNSpriteEditor(QWidget *parent)
     ui->setupUi(this);
 
     // Load previous path and window size
+    this->setWindowTitle(this->windowTitle() + " " + c_programVersion);
     m_settings = new QSettings("brianuuu", "BNSpriteEditor", this);
     m_path = m_settings->value("DefaultDirectory", QString()).toString();
     m_simpleMode = false;
@@ -593,9 +596,11 @@ void BNSpriteEditor::on_actionExport_Sprite_as_Individual_PNG_triggered()
 
 void BNSpriteEditor::on_actionAbout_BNSpriteEditor_triggered()
 {
-    QString message = "BNSpriteEditor - Megaman Battle Network Sprite Creator/Editor v0.2.3";
+    QString message = "BNSpriteEditor - Megaman Battle Network Sprite Creator/Editor " + c_programVersion;
     message += "\nCreated by brianuuu 2020";
     message += "\nYoutube: brianuuuSonic Reborn";
+    message += "\n\nContributors:";
+    message += "\nProf.9";
     QMessageBox::information(this, "About BNSpriteEditor", message, QMessageBox::Ok);
 }
 
