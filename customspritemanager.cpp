@@ -5,8 +5,9 @@
 #define USE_FIRST_FIT_OAM 0
 
 // Save version
-static const uint32_t c_saveVersion = 1;
+static const uint32_t c_saveVersion = 2;
 // 1: initial save version
+// 2: fix for m_startTile changed from uint8_t to uint16_t
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -344,7 +345,7 @@ void CustomSpriteManager:: on_actionLoad_Project_triggered()
 
     if (tilesetCount > 0)
     {
-        emit LoadProjectSignal(file, pos, m_tilesets.size());
+        emit LoadProjectSignal(file, saveVersion, pos, m_tilesets.size());
 
         ui->Frame_LW->setCurrentRow(-1);
         BuildLayoutChange(true);

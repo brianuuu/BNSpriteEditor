@@ -626,7 +626,7 @@ void BNSpriteEditor::on_actionCustom_Sprite_Manager_triggered()
         connect(m_csm, SIGNAL(BuildDataReady(int)), this, SLOT(on_CSM_BuildSprite_pressed(int)));
         connect(m_csm, SIGNAL(BuildCheckButton()), this, SLOT(on_CSM_BuildCheckButton_pressed()));
         connect(m_csm, SIGNAL(BuildPushFrame(int,bool)), this, SLOT(on_CSM_BuildPushFrame_pressed(int,bool)));
-        connect(m_csm, SIGNAL(LoadProjectSignal(QString,qint64,int)), this, SLOT(on_CSM_LoadProject_pressed(QString,qint64,int)));
+        connect(m_csm, SIGNAL(LoadProjectSignal(QString,uint32_t,qint64,int)), this, SLOT(on_CSM_LoadProject_pressed(QString,uint32_t,qint64,int)));
         connect(m_csm, SIGNAL(SaveProjectSignal(QString)), this, SLOT(on_CSM_SaveProject_pressed(QString)));
     }
 
@@ -3389,7 +3389,7 @@ void BNSpriteEditor::on_CSM_BuildPushFrame_pressed(int frameID, bool newAnim)
     }
 }
 
-void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, qint64 skipByte, int tilesetCount)
+void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, uint32_t fileVersion, qint64 skipByte, int tilesetCount)
 {
     ResetProgram();
 
@@ -3474,7 +3474,20 @@ void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, qint64 skipByte, i
                 for (int subObjectID = 0; subObjectID < subObjectCount; subObjectID++)
                 {
                     BNSprite::SubObject subObject;
-                    in >> subObject.m_startTile;
+
+                    if (fileVersion == 1)
+                    {
+                        // ver.1 uses uint8_t
+                        uint8_t startTile;
+                        in >> startTile;
+                        subObject.m_startTile = startTile;
+                    }
+                    else
+                    {
+                        // ver.2 afterwards uses uint16_t
+                        in >> subObject.m_startTile;
+                    }
+
                     in >> subObject.m_posX;
                     in >> subObject.m_posY;
                     in >> subObject.m_hFlip;

@@ -43,7 +43,7 @@ signals:
     void BuildDataReady(int tilesetCount);
     void BuildCheckButton();
     void BuildPushFrame(int frame, bool newAnim);
-    void LoadProjectSignal(QString file, qint64 skipByte, int tilesetCount);
+    void LoadProjectSignal(QString file, uint32_t fileVersion, qint64 skipByte, int tilesetCount);
     void SaveProjectSignal(QString file);
 
 private:

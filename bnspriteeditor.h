@@ -143,7 +143,7 @@ private slots:
     void on_CSM_BuildSprite_pressed(int tilesetCount);
     void on_CSM_BuildCheckButton_pressed();
     void on_CSM_BuildPushFrame_pressed(int frameID, bool newAnim);
-    void on_CSM_LoadProject_pressed(QString file, qint64 skipByte, int tilesetCount);
+    void on_CSM_LoadProject_pressed(QString file, uint32_t fileVersion, qint64 skipByte, int tilesetCount);
     void on_CSM_SaveProject_pressed(QString file);
 
 private:
