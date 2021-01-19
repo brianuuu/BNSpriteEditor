@@ -45,7 +45,7 @@ void BNSprite::Clear()
 //-----------------------------------------------------
 // Load a sprite file, return false if fail
 //-----------------------------------------------------
-bool BNSprite::Load
+bool BNSprite::LoadBN
 (
     wstring const& _fileName,
     string& _errorMsg
@@ -650,10 +650,436 @@ bool BNSprite::Load
     return true;
 }
 
+bool BNSprite::LoadSF
+(
+    wstring const& _fileName,
+    string& _errorMsg
+)
+{
+    typedef struct
+    {
+        uint16_t tileNum;
+        uint16_t tileCount;
+        uint32_t fromSprite;
+    } TilesetInfo;
+
+    Clear();
+
+    FILE* f;
+    _wfopen_s(&f, _fileName.c_str(), L"rb");
+    if (!f)
+    {
+        _errorMsg = "Unable to open file!";
+        fclose(f);
+        return false;
+    }
+
+    // File size
+    fseek(f, 0, SEEK_END);
+    uint32_t fileSize = ftell(f);
+
+    // Read file header
+    fseek(f, 0, SEEK_SET);
+    if (fileSize - ftell(f) < 0x14)
+    {
+        _errorMsg = "Incomplete file header";
+        fclose(f);
+        return false;
+    }
+    uint32_t tsetHdrOffs = ReadInt(f);
+    uint32_t palsHdrOffs = ReadInt(f);
+    uint32_t animHdrOffs = ReadInt(f);
+    uint32_t sprsHdrOffs = ReadInt(f);
+    uint32_t tnumShift   = ReadInt(f);
+    if (tsetHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for tilesets segment";
+        fclose(f);
+        return false;
+    }
+    if (palsHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for palettes segment";
+        fclose(f);
+        return false;
+    }
+    if (animHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for animations segment";
+        fclose(f);
+        return false;
+    }
+    if (sprsHdrOffs > fileSize)
+    {
+        _errorMsg = "Invalid offset for sprites segment";
+        fclose(f);
+        return false;
+    }
+
+    // Read sprites header
+    std::cout << "Reading sprites header..." << endl;
+    fseek(f, sprsHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 4)
+    {
+        _errorMsg = "Incomplete sprites header";
+        fclose(f);
+        return false;
+    }
+    uint16_t spriteCount = ReadShort(f);
+    fseek(f, 2, SEEK_CUR); // skip padding (?)
+
+    // Read sprite pointers
+    std::cout << "Reading sprite pointers..." << endl;
+    vector<uint32_t> spritePtrs;
+    vector<Frame> sprites;
+    vector<bool> spriteUsed;
+    spritePtrs.reserve(spriteCount);
+    sprites.reserve(spriteCount);
+    spriteUsed.reserve(spriteCount);
+    for (size_t i = 0; i < spriteCount; i++)
+    {
+        if (fileSize - ftell(f) < 0x4)
+        {
+            _errorMsg = "Missing sprite pointer for sprite " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
+        uint32_t ptr = ReadInt(f) + sprsHdrOffs;
+        if (ptr > fileSize)
+        {
+            _errorMsg = "Invalid sprite pointer for sprite " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
+        spritePtrs.push_back(ptr);
+    }
+
+    // Read sprites
+    std::cout << "Reading sprites..." << endl;
+    for (size_t i = 0; i < spriteCount; i++)
+    {
+        fseek(f, spritePtrs[i], SEEK_SET);
+        Frame sprite;
+
+        // Read objects
+        Object obj;
+        bool last = false;
+        do
+        {
+            if (fileSize - ftell(f) < 0x8)
+            {
+                _errorMsg = "Object list for sprite " + to_string(i) + " ended prematurely";
+                fclose(f);
+                return false;
+            }
+
+            SubObject subObj;
+            subObj.m_startTile = ReadByte(f) << tnumShift;
+            subObj.m_posX = (int8_t)ReadByte(f);
+            subObj.m_posY = (int8_t)ReadByte(f);
+
+            uint8_t size = ReadByte(f);
+            uint8_t shape = ReadByte(f);
+            uint8_t sizeShape = ((size & 0x3) << 0x4) | (shape & 0x3);
+            switch (sizeShape)
+            {
+            case 0x00: subObj.m_sizeX =  8; subObj.m_sizeY =  8; break;
+            case 0x01: subObj.m_sizeX = 16; subObj.m_sizeY =  8; break;
+            case 0x02: subObj.m_sizeX =  8; subObj.m_sizeY = 16; break;
+            case 0x10: subObj.m_sizeX = 16; subObj.m_sizeY = 16; break;
+            case 0x11: subObj.m_sizeX = 32; subObj.m_sizeY =  8; break;
+            case 0x12: subObj.m_sizeX =  8; subObj.m_sizeY = 32; break;
+            case 0x20: subObj.m_sizeX = 32; subObj.m_sizeY = 32; break;
+            case 0x21: subObj.m_sizeX = 32; subObj.m_sizeY = 16; break;
+            case 0x22: subObj.m_sizeX = 16; subObj.m_sizeY = 32; break;
+            case 0x30: subObj.m_sizeX = 64; subObj.m_sizeY = 64; break;
+            case 0x31: subObj.m_sizeX = 64; subObj.m_sizeY = 32; break;
+            case 0x32: subObj.m_sizeX = 32; subObj.m_sizeY = 64; break;
+            default:
+                _errorMsg = "Invalid size/shape combination in sprite " + to_string(i) + " object " + to_string(obj.m_subObjects.size());
+                fclose(f);
+                return false;
+            }
+
+            uint8_t flip = ReadByte(f);
+            subObj.m_hFlip = flip & 0x1;
+            subObj.m_vFlip = flip & 0x2;
+
+            last = ReadByte(f);
+
+            subObj.m_startTile += (ReadByte(f) << (8 + tnumShift));
+
+            obj.m_subObjects.push_back(subObj);
+        }
+        while (!last);
+        sprite.m_objects.push_back(obj);
+
+        // Create dummy subanimation
+        SubFrame subFrame;
+        SubAnimation subAnim;
+        subFrame.m_objectIndex = 0;
+        subFrame.m_delay = 1;
+        subAnim.m_loop = true;
+        subAnim.m_subFrames.push_back(subFrame);
+        sprite.m_subAnimations.push_back(subAnim);
+
+        sprites.push_back(sprite);
+        spriteUsed.push_back(false);
+    }
+
+    // Read palettes header
+    std::cout << "Reading palettes header..." << endl;
+    fseek(f, palsHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x4)
+    {
+        _errorMsg = "Incomplete palettes header";
+        fclose(f);
+        return false;
+    }
+    PaletteGroup palGrp;
+    m_paletteGroups.push_back(palGrp);
+    uint16_t colDepth = ReadShort(f);
+    uint16_t palCountMax = ReadShort(f);
+    uint16_t palSize = 0;
+    uint32_t tileSize = 0;
+    if (colDepth == 5)
+    {
+        palSize = 16;
+        tileSize = 0x20;
+    }
+    //else if (colDepth == 6)
+    //{
+    //    palSize = 256;
+    //    tileSize = 0x40;
+    //}
+    else
+    {
+        _errorMsg = "Unsupported color mode " + to_string(colDepth);
+        return false;
+    }
+
+    // Figure out the end of the palettes block (probably animations...)
+    long blockEnd = fileSize;
+    if (tsetHdrOffs > palsHdrOffs && (long)tsetHdrOffs < blockEnd)
+    {
+        blockEnd = tsetHdrOffs;
+    }
+    if (animHdrOffs > palsHdrOffs && (long)animHdrOffs < blockEnd)
+    {
+        blockEnd = animHdrOffs;
+    }
+    if (sprsHdrOffs > palsHdrOffs && (long)sprsHdrOffs < blockEnd)
+    {
+        blockEnd = sprsHdrOffs;
+    }
+
+    // Read palettes
+    std::cout << "Reading palettes..." << endl;
+    for (size_t i = 0; ftell(f) < blockEnd; i++)
+    {
+        if (fileSize - ftell(f) < palSize * 0x2)
+        {
+            _errorMsg = "Palette " + to_string(i) + " ended prematurely";
+            fclose(f);
+            return false;
+        }
+
+        Palette pal;
+        for (size_t j = 0; j < palSize; j++)
+        {
+            pal.m_colors.push_back(ReadShort(f));
+        }
+        m_paletteGroups[0].m_palettes.push_back(pal);
+    }
+
+    // Read tilesets header
+    std::cout << "Reading tilesets header..." << endl;
+    fseek(f, tsetHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x8)
+    {
+        _errorMsg = "Incomplete tilesets header";
+        fclose(f);
+        return false;
+    }
+    uint16_t maxTileCount = ReadShort(f);
+    uint16_t totalTileCount = ReadShort(f);
+    uint16_t tsetHdrSize = ReadShort(f);
+    fseek(f, 2, SEEK_CUR); // skip padding (?)
+
+    // Read tilesets entries
+    std::cout << "Reading tilesets entries..." << endl;
+    vector<TilesetInfo> tsetEntries;
+    tsetEntries.reserve(spriteCount);
+    for (size_t i = 0; i < spriteCount; i++)
+    {
+        if (fileSize - ftell(f) < 0x4)
+        {
+            _errorMsg = "Incomplete tileset entry for sprite " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
+        TilesetInfo entry;
+        entry.tileCount  = ReadShort(f);
+        entry.tileNum    = ReadShort(f);
+        entry.fromSprite = i;
+
+        // Check for duplicate entries
+        auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const auto& x)
+        {
+            return x.tileNum == entry.tileNum && x.tileCount == entry.tileCount;
+        });
+        if (it != tsetEntries.end())
+        {
+            // Use existing ID
+            sprites[i].m_tilesetID = it - tsetEntries.begin();
+        }
+        else
+        {
+            // Create new ID
+            sprites[i].m_tilesetID = tsetEntries.size();
+            tsetEntries.push_back(entry);
+        }
+    }
+
+    // Read tilesets
+    std::cout << "Reading tilesets..." << endl;
+    for (size_t i = 0; i < tsetEntries.size(); i++)
+    {
+        TilesetInfo tsetEntry = tsetEntries[i];
+        uint32_t tsetPtr = tsetHdrOffs + tsetHdrSize + tsetEntry.tileNum * tileSize;
+        if (tsetPtr > fileSize)
+        {
+            _errorMsg = "Invalid tile offset for sprite " + to_string(tsetEntry.fromSprite);
+            fclose(f);
+            return false;
+        }
+        fseek(f, tsetPtr, SEEK_SET);
+
+        Tileset tset;
+        uint32_t tsetSize = tsetEntry.tileCount * tileSize;
+        tset.m_data.reserve(tsetSize);
+
+        if (fileSize - ftell(f) < tsetSize)
+        {
+            _errorMsg = "Incomplete tileset for sprite " + to_string(tsetEntry.fromSprite);
+            fclose(f);
+            return false;
+        }
+
+        for (uint32_t j = 0; j < tsetSize; j++)
+        {
+            tset.m_data.push_back(ReadByte(f));
+        }
+        m_tilesets.push_back(tset);
+    }
+
+    // Read animations
+    std::cout << "Reading animations header..." << endl;
+    fseek(f, animHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x4)
+    {
+        _errorMsg = "Incomplete animations header";
+        fclose(f);
+        return false;
+    }
+    uint16_t animCount = ReadShort(f);
+    fseek(f, 2, SEEK_CUR); // skip padding (?)
+
+    // Read animation pointers
+    std::cout << "Reading animation pointers..." << endl;
+    vector<uint32_t> animPtrs;
+    animPtrs.reserve(animCount);
+    for (size_t i = 0; i < animCount; i++)
+    {
+        if (fileSize - ftell(f) < 0x4)
+        {
+            _errorMsg = "Missing animation pointer for animation " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
+        uint32_t ptr = ReadInt(f) + animHdrOffs;
+        if (ptr > fileSize)
+        {
+            _errorMsg = "Invalid animation pointer for animation " + to_string(i);
+            fclose(f);
+            return false;
+        }
+
+        animPtrs.push_back(ptr);
+    }
+
+    // Read animations
+    std::cout << "Reading animations..." << endl;
+    m_animations.reserve(animCount);
+    for (size_t i = 0; i < animCount; i++)
+    {
+        fseek(f, animPtrs[i], SEEK_SET);
+
+        Animation anim;
+        uint8_t loop;
+        do
+        {
+            if (fileSize - ftell(f) < 0x4)
+            {
+                _errorMsg = "Animation " + to_string(i) + " ended prematurely";
+                fclose(f);
+                return false;
+            }
+
+            uint8_t sprIdx = ReadByte(f);
+            uint8_t delay = ReadByte(f);
+            loop = ReadByte(f);
+            uint8_t palIdx = ReadByte(f);
+
+            Frame frame = sprites[sprIdx];
+            frame.m_delay = delay;
+            frame.m_objects[0].m_paletteIndex = palIdx;
+            spriteUsed[sprIdx] = true;
+
+            if (palIdx >= m_paletteGroups[0].m_palettes.size())
+            {
+                _errorMsg = "Invalid palette index for animation " + to_string(i) + " frame " + to_string(anim.m_frames.size());
+                fclose(f);
+                return false;
+            }
+
+            anim.m_frames.push_back(frame);
+        }
+        while (!(loop & 0xC0));
+        anim.m_loop = loop & 0x40;
+
+        m_animations.push_back(anim);
+    }
+
+    // Make extra animation for all unused sprites
+    auto it = find(spriteUsed.begin(), spriteUsed.end(), false);
+    if (it != spriteUsed.end())
+    {
+        Animation anim;
+
+        for (size_t i = 0; i < spriteCount; i++)
+        {
+            if (spriteUsed[i]) continue;
+
+            anim.m_frames.push_back(sprites[i]);
+        }
+
+        m_animations.push_back(anim);
+    }
+
+    fclose(f);
+    m_loaded = true;
+    return true;
+}
+
 //-----------------------------------------------------
 // Save a sprite file, return false if fail
 //-----------------------------------------------------
-bool BNSprite::Save
+bool BNSprite::SaveBN
 (
     wstring const& _fileName,
     string& _errorMsg
@@ -969,6 +1395,300 @@ bool BNSprite::Save
     // Go back and write the largest tileset count
     fseek(f, 0x00, SEEK_SET);
     WriteByte(f, largestTileCount);
+
+    fclose(f);
+    return true;
+}
+
+bool BNSprite::SaveSF
+(
+    wstring const& _fileName,
+    string& _errorMsg
+)
+{
+    typedef struct
+    {
+        uint16_t tileNum;
+        uint16_t tileCount;
+    } TilesetInfo;
+
+    // Check multiple palette groups
+    if (m_paletteGroups.size() > 1)
+    {
+        _errorMsg = "SF sprite does not support multiple palette groups";
+        return false;
+    }
+
+    // Get all unique sprites
+    // Also check what tilesets are used
+    vector<Frame> sprites;
+    vector<vector<size_t>> spriteIdxes;
+    vector<Tileset> tsets;
+    vector<TilesetInfo> tsetEntries;
+    vector<int> tsetIdxes(m_tilesets.size(), -1);
+    spriteIdxes.reserve(m_animations.size());
+    tsets.reserve(m_tilesets.size());
+    tsetEntries.reserve(m_tilesets.size());
+    size_t tsetSizeMax = 0;
+    size_t tsetSizeTotal = 0;
+    for (size_t i = 0; i < m_animations.size(); i++)
+    {
+        Animation anim = m_animations[i];
+        vector<size_t> animSpriteIdxes;
+        animSpriteIdxes.reserve(anim.m_frames.size());
+
+        for (size_t j = 0; j < anim.m_frames.size(); j++)
+        {
+            Frame frame = anim.m_frames[j];
+
+            // Check if sprite is valid for SF
+            if (frame.m_subAnimations.size() > 1 ||
+                frame.m_subAnimations[0].m_subFrames.size() > 1)
+            {
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ":"
+                          + "SF sprite does not support sub animations";
+                return false;
+            }
+            if (frame.m_objects.size() > 1)
+            {
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ":"
+                          + "SF sprite does not support multiple object lists";
+                return false;
+            }
+
+            // New tileset to be added
+            if (tsetIdxes[frame.m_tilesetID] == -1)
+            {
+                Tileset tset = m_tilesets[frame.m_tilesetID];
+                size_t tsetSize = tset.m_data.size() / 0x20;
+
+                // Add tileset
+                tsetIdxes[frame.m_tilesetID] = (int)tsets.size();
+                tsets.push_back(tset);
+
+                // Create tileset entry
+                TilesetInfo entry;
+                entry.tileNum = (uint16_t)tsetSizeTotal;
+                entry.tileCount = (uint16_t)tsetSize;
+                tsetEntries.push_back(entry);
+
+                // Increment counters
+                if (tsetSize > tsetSizeMax)
+                {
+                    tsetSizeMax = tsetSize;
+                }
+                tsetSizeTotal += tsetSize;
+            }
+
+            // Find duplicate sprites
+            auto it = find_if(sprites.begin(), sprites.end(), [&frame] (const auto& x)
+            {
+                // Tileset needs to match
+                if (frame.m_tilesetID != x.m_tilesetID)
+                {
+                    return false;
+                }
+
+                // Objects need to match
+                if (frame.m_objects.size() != x.m_objects.size())
+                {
+                    return false;
+                }
+
+                // Check each object
+                for (size_t i = 0; i < frame.m_objects.size(); i++)
+                {
+                    if (frame.m_objects[i].m_subObjects.size() != x.m_objects[i].m_subObjects.size())
+                    {
+                        return false;
+                    }
+
+                    for (size_t j = 0; j < frame.m_objects[i].m_subObjects.size(); j++)
+                    {
+                        SubObject a = frame.m_objects[i].m_subObjects[j];
+                        SubObject b = x.m_objects[i].m_subObjects[j];
+
+                        if (a.m_startTile != b.m_startTile ||
+                            a.m_posX != b.m_posX ||
+                            a.m_posY != b.m_posY ||
+                            a.m_sizeX != b.m_sizeX ||
+                            a.m_sizeY != b.m_sizeY ||
+                            a.m_hFlip != b.m_hFlip ||
+                            a.m_vFlip != b.m_vFlip)
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                // Note that palette does NOT need to match
+
+                // Sprites are a match
+                return true;
+            });
+            if (it != sprites.end())
+            {
+                // Use existing ID
+                animSpriteIdxes.push_back(it - sprites.begin());
+            }
+            else
+            {
+                // Create new ID
+                animSpriteIdxes.push_back(sprites.size());
+                sprites.push_back(frame);
+            }
+        }
+
+        spriteIdxes.push_back(animSpriteIdxes);
+    }
+    if (sprites.size() > 0xFF)
+    {
+        _errorMsg = "SF cannot have more than 255 unique sprites. This file has " + to_string(sprites.size()) + ".";
+        return false;
+    }
+
+    FILE* f;
+    _wfopen_s(&f, _fileName.c_str(), L"wb");
+    if (!f)
+    {
+        _errorMsg = "Unable to open file!";
+        fclose(f);
+        return false;
+    }
+
+    // Write tilesets header
+    fseek(f, 0x14, SEEK_SET);
+    uint32_t tsetHdrOffs = ftell(f);
+    WriteShort(f, tsetSizeMax);
+    WriteShort(f, tsetSizeTotal);
+    WriteShort(f, 0x8 + sprites.size() * 0x4); // header size
+    AlignFourBytes(f);
+    for (Frame sprite : sprites)
+    {
+        TilesetInfo entry = tsetEntries[tsetIdxes[sprite.m_tilesetID]];
+        WriteShort(f, entry.tileCount);
+        WriteShort(f, entry.tileNum);
+    }
+
+    // Write tilesets
+    for (Tileset tset : tsets)
+    {
+        for (uint8_t b : tset.m_data)
+        {
+            WriteByte(f, b);
+        }
+    }
+    AlignFourBytes(f);
+
+    // Write palettes header
+    uint32_t palsHdrOffs = ftell(f);
+    WriteShort(f, 0x5); // color depth
+    WriteShort(f, 0x10); // palette size
+
+    // Write palettes
+    for (Palette pal : m_paletteGroups[0].m_palettes)
+    {
+        for (uint16_t c : pal.m_colors)
+        {
+            WriteShort(f, c);
+        }
+    }
+    AlignFourBytes(f);
+
+    // Write animations header
+    uint32_t animHdrOffs = ftell(f);
+    WriteShort(f, m_animations.size());
+    AlignFourBytes(f);
+    uint32_t animPtr = 0x4 + m_animations.size() * 0x4;
+    for (Animation anim : m_animations)
+    {
+        WriteInt(f, animPtr);
+        animPtr += anim.m_frames.size() * 0x4;
+    }
+
+    // Write animations
+    for (size_t i = 0; i < m_animations.size(); i++)
+    {
+        Animation anim = m_animations[i];
+        for (size_t j = 0; j < anim.m_frames.size(); j++)
+        {
+            Frame frame = anim.m_frames[j];
+            size_t sprIdx = spriteIdxes[i][j];
+
+            WriteByte(f, sprIdx);
+            WriteByte(f, frame.m_delay);
+            if (j == anim.m_frames.size() - 1)
+            {
+                WriteByte(f, anim.m_loop ? 0x40 : 0x80);
+            }
+            else
+            {
+                WriteByte(f, 0x00);
+            }
+            WriteByte(f, frame.m_objects[0].m_paletteIndex);
+        }
+    }
+    AlignFourBytes(f);
+
+    // Write sprites header
+    uint32_t sprsHdrOffs = ftell(f);
+    WriteShort(f, sprites.size());
+    AlignFourBytes(f);
+    uint32_t spritePtr = 0x4 + sprites.size() * 0x4;
+    for (Frame sprite : sprites)
+    {
+        WriteInt(f, spritePtr);
+        spritePtr += sprite.m_objects[0].m_subObjects.size() * 0x8;
+    }
+
+    // Write sprites
+    for (Frame sprite : sprites)
+    {
+        vector<SubObject> &subObjs = sprite.m_objects[0].m_subObjects;
+        for (size_t i = 0; i < subObjs.size(); i++)
+        {
+            SubObject subObj = subObjs[i];
+
+            uint8_t size = 0;
+            uint8_t shape = 0;
+            if (subObj.m_sizeX ==  8 && subObj.m_sizeY ==  8) { size = 0; shape = 0; }
+            if (subObj.m_sizeX == 16 && subObj.m_sizeY ==  8) { size = 0; shape = 1; }
+            if (subObj.m_sizeX ==  8 && subObj.m_sizeY == 16) { size = 0; shape = 2; }
+            if (subObj.m_sizeX == 16 && subObj.m_sizeY == 16) { size = 1; shape = 0; }
+            if (subObj.m_sizeX == 32 && subObj.m_sizeY ==  8) { size = 1; shape = 1; }
+            if (subObj.m_sizeX ==  8 && subObj.m_sizeY == 32) { size = 1; shape = 2; }
+            if (subObj.m_sizeX == 32 && subObj.m_sizeY == 32) { size = 2; shape = 0; }
+            if (subObj.m_sizeX == 32 && subObj.m_sizeY == 16) { size = 2; shape = 1; }
+            if (subObj.m_sizeX == 16 && subObj.m_sizeY == 32) { size = 2; shape = 2; }
+            if (subObj.m_sizeX == 64 && subObj.m_sizeY == 64) { size = 3; shape = 0; }
+            if (subObj.m_sizeX == 64 && subObj.m_sizeY == 32) { size = 3; shape = 1; }
+            if (subObj.m_sizeX == 32 && subObj.m_sizeY == 64) { size = 3; shape = 2; }
+
+            uint8_t flip = 0;
+            flip |= subObj.m_hFlip ? 0x1 : 0x0;
+            flip |= subObj.m_vFlip ? 0x2 : 0x0;
+
+            bool last = i == subObjs.size() - 1;
+
+            WriteByte(f, subObj.m_startTile >> 0x1);
+            WriteByte(f, subObj.m_posX);
+            WriteByte(f, subObj.m_posY);
+            WriteByte(f, size);
+            WriteByte(f, shape);
+            WriteByte(f, flip);
+            WriteByte(f, last);
+            WriteByte(f, subObj.m_startTile >> 0x9);
+        }
+    }
+    AlignFourBytes(f);
+
+    // Write file header
+    fseek(f, 0, SEEK_SET);
+    WriteInt(f, tsetHdrOffs);
+    WriteInt(f, palsHdrOffs);
+    WriteInt(f, animHdrOffs);
+    WriteInt(f, sprsHdrOffs);
+    WriteInt(f, 1); // tile number shift
 
     fclose(f);
     return true;
