@@ -927,7 +927,7 @@ bool BNSprite::LoadSF
         entry.fromSprite = i;
 
         // Check for duplicate entries
-        auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const auto& x)
+        auto it = find_if(tsetEntries.begin(), tsetEntries.end(), [&entry] (const TilesetInfo& x)
         {
             return x.tileNum == entry.tileNum && x.tileCount == entry.tileCount;
         });
@@ -1481,7 +1481,7 @@ bool BNSprite::SaveSF
             }
 
             // Find duplicate sprites
-            auto it = find_if(sprites.begin(), sprites.end(), [&frame] (const auto& x)
+            auto it = find_if(sprites.begin(), sprites.end(), [&frame] (const Frame& x)
             {
                 // Tileset needs to match
                 if (frame.m_tilesetID != x.m_tilesetID)
