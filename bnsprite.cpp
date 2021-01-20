@@ -103,6 +103,8 @@ bool BNSprite::LoadBN
         return false;
     }
 
+    set<uint32_t> allPtrs;
+
     // Read animation pointers
     std::cout << "Reading animation pointers..." << endl;
     vector<uint32_t> animPtrs;
@@ -117,6 +119,7 @@ bool BNSprite::LoadBN
             return false;
         }
 
+        allPtrs.insert(ptr);
         animPtrs.push_back(ptr);
     }
 
@@ -165,6 +168,7 @@ bool BNSprite::LoadBN
                 else
                 {
                     // Create new ID
+                    allPtrs.insert(ptr);
                     tilesetPtrs.push_back(ptr);
                     frame.m_tilesetID = tilesetID;
                     tilesetID++;
@@ -191,6 +195,7 @@ bool BNSprite::LoadBN
                 else
                 {
                     // Create new ID
+                    allPtrs.insert(ptr);
                     paletteGroupPtrs.push_back(ptr);
                     frame.m_paletteGroupID = paletteGroupID;
                     paletteGroupID++;
@@ -200,6 +205,7 @@ bool BNSprite::LoadBN
             // Read sub animation
             {
                 uint32_t subAnimPtr = ReadInt(f) + metadataOffset;
+                allPtrs.insert(subAnimPtr);
                 uint32_t rewindOffset = ftell(f);
                 if (subAnimPtr <= (uint32_t)ftell(f) - 0x04 || subAnimPtr >= fileSize)
                 {
@@ -230,6 +236,7 @@ bool BNSprite::LoadBN
                         return false;
                     }
                     subAnimPtrs.push_back(ptr);
+                    allPtrs.insert(ptr);
                 }
 
                 // Read sub animations and frames
@@ -311,6 +318,7 @@ bool BNSprite::LoadBN
             // Read object
             {
                 uint32_t objectListPtr = ReadInt(f) + metadataOffset;
+                allPtrs.insert(objectListPtr);
                 uint32_t rewindOffset = ftell(f);
                 if (objectListPtr  <= (uint32_t)ftell(f) - 0x04 || objectListPtr >= fileSize)
                 {
@@ -341,6 +349,7 @@ bool BNSprite::LoadBN
                         return false;
                     }
                     objectPtrs.push_back(ptr);
+                    allPtrs.insert(ptr);
                 }
 
                 // Read sub animations and frames
@@ -559,12 +568,12 @@ bool BNSprite::LoadBN
     {
         uint32_t const& palettePtr = paletteGroupPtrs[i];
 
-        uint32_t nextPalettePtr = 0xFFFFFFFF;
-        for (uint32_t const& ptr : paletteGroupPtrs)
+        uint32_t nextUsedPtr = fileSize;
+        for (uint32_t const& ptr : allPtrs)
         {
-            if (ptr > palettePtr && ptr < nextPalettePtr)
+            if (ptr > palettePtr && ptr < nextUsedPtr)
             {
-                nextPalettePtr = ptr;
+                nextUsedPtr = ptr;
             }
         }
 
@@ -573,47 +582,25 @@ bool BNSprite::LoadBN
         PaletteGroup group;
 
         // Search for palette until invalid color is found
-        bool valid = true;
-        while (valid && group.m_palettes.size() < 0xFFFF && (uint32_t)ftell(f) < nextPalettePtr && (uint32_t)ftell(f) < fileSize)
+        while (group.m_palettes.size() < 0xFF && (uint32_t)ftell(f) < nextUsedPtr)
         {
             Palette palette;
             palette.m_colors.reserve(0x10);
 
-            bool mostSignificantBitSet = false;
             for (uint8_t j = 0; j < 0x10; j++)
             {
-                uint16_t color = ReadShort(f);
-                // Check the 2nd color if the first bit is set (first color is transparent and we don't care)
-                if (j == 1)
+                if ((uint32_t)ftell(f) < fileSize)
                 {
-                    mostSignificantBitSet = (color & 0x8000) > 0;
-                }
-
-                // Always accept first color
-                if (j == 0 || (mostSignificantBitSet == (color & 0x8000) > 0))
-                {
-                    // Filter out first bit
+                    uint16_t color = ReadShort(f);
                     palette.m_colors.push_back(color & 0x7FFF);
                 }
                 else
                 {
-                    // Only accept either all color has first bit set, or all doesn't
-                    valid = false;
-                    break;
+                    palette.m_colors.push_back(0);
                 }
             }
 
-            if (valid)
-            {
-                group.m_palettes.push_back(palette);
-            }
-        }
-
-        if (group.m_palettes.empty())
-        {
-            _errorMsg = "Invalid palette at address " + GetAddressString(ftell(f) - 2);
-            fclose(f);
-            return false;
+            group.m_palettes.push_back(palette);
         }
 
         m_paletteGroups.push_back(group);
