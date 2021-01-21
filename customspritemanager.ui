@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1047</width>
-    <height>933</height>
+    <height>934</height>
    </rect>
   </property>
   <property name="font">
@@ -34,13 +34,6 @@
          <string>Frames</string>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_11">
-         <item>
-          <widget class="QCheckBox" name="Frame_CB_Blank">
-           <property name="text">
-            <string>Empty Frame</string>
-           </property>
-          </widget>
-         </item>
          <item>
           <widget class="ListWidgetIgnoreSelf" name="Frame_LW">
            <property name="sizePolicy">
@@ -634,7 +627,7 @@
               </palette>
              </property>
              <property name="text">
-              <string>Palette Index cannot be larger than 15!</string>
+              <string>Warning: BN Sprite only support index &lt;= 15</string>
              </property>
             </widget>
            </item>

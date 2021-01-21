@@ -1161,9 +1161,9 @@ void BNSpriteEditor::on_Frame_LW_currentItemChanged(QListWidgetItem *current, QL
     int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
     ui->Palette_SB_Group->setValue(m_frame.m_paletteGroupID);
     ui->Palette_SB_Group->setEnabled(true);
-    ui->Palette_SB_Index->setMaximum(maximum);
+    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_SB_Index->setEnabled(true);
-    ui->Palette_PB_New->setEnabled(!csmActive);
+    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
     ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
 
     // Tileset
@@ -2070,9 +2070,10 @@ void BNSpriteEditor::on_Palette_SB_Group_valueChanged(int arg1)
     bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
     int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
     ui->Palette_SB_Index->blockSignals(true);
-    ui->Palette_SB_Index->setMaximum(maximum);
+    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_SB_Index->setValue(0);
     ui->Palette_SB_Index->blockSignals(false);
+    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
     ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
     for (BNSprite::Object& object : m_frame.m_objects)
     {
@@ -2119,26 +2120,21 @@ void BNSpriteEditor::on_Palette_SB_Index_valueChanged(int arg1)
     int objectID = ui->Object_Tabs->currentIndex();
     BNSprite::Object& object = m_frame.m_objects[objectID];
 
-    QColor color;
+    // Show warning for BN sprites if index > 15
     if (arg1 > 15)
     {
-        color = QColor(255,80,80);
         ui->Palette_Warning->setHidden(false);
     }
     else
     {
-        color = QColor(255,255,255);
         ui->Palette_Warning->setHidden(true);
     }
-    QPalette pal = ui->Palette_SB_Index->palette();
-    pal.setColor(QPalette::Base, color);
-    ui->Palette_SB_Index->setPalette(pal);
 
     if (object.m_paletteIndex == arg1 || !ui->Palette_SB_Index->isEnabled()) return;
     object.m_paletteIndex = arg1;
 
-    // Only update if index <= 15
-    if (arg1 <= 15)
+    // Only update if index <= 255
+    if (arg1 <= 255)
     {
         int animID = ui->Anim_LW->currentRow();
         int frameID = ui->Frame_LW->currentRow();
@@ -2183,7 +2179,8 @@ void BNSpriteEditor::on_Palette_PB_New_clicked()
 
     bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
     int maximum = paletteGroup.size() - 1;
-    ui->Palette_SB_Index->setMaximum(maximum);
+    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
+    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
     ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
 }
 
@@ -2208,8 +2205,9 @@ void BNSpriteEditor::on_Palette_PB_Del_clicked()
     bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
     int maximum = paletteGroup.size() - 1;
     ui->Palette_SB_Index->blockSignals(true);
-    ui->Palette_SB_Index->setMaximum(maximum);
+    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_SB_Index->blockSignals(false);
+    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
     ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
 
     // Redraw preview, OAM, tileset
@@ -3394,7 +3392,7 @@ void BNSpriteEditor::on_CSM_BuildPushFrame_pressed(int frameID, bool newAnim)
     }
 }
 
-void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, uint32_t fileVersion, qint64 skipByte, int tilesetCount)
+void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, uint32_t saveVersion, qint64 skipByte, int tilesetCount)
 {
     ResetProgram();
 
@@ -3480,17 +3478,17 @@ void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, uint32_t fileVersi
                 {
                     BNSprite::SubObject subObject;
 
-                    if (fileVersion == 1)
+                    if (saveVersion >= 2)
+                    {
+                        // ver.2 afterwards uses uint16_t
+                        in >> subObject.m_startTile;
+                    }
+                    else
                     {
                         // ver.1 uses uint8_t
                         uint8_t startTile;
                         in >> startTile;
                         subObject.m_startTile = startTile;
-                    }
-                    else
-                    {
-                        // ver.2 afterwards uses uint16_t
-                        in >> subObject.m_startTile;
                     }
 
                     in >> subObject.m_posX;

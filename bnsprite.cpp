@@ -1046,6 +1046,26 @@ bool BNSprite::SaveBN
     string& _errorMsg
 )
 {
+    // Check if sprite is valid for BN sprite
+    for (uint32_t a = 0; a < m_animations.size(); a++)
+    {
+        Animation const& anim = m_animations[a];
+        for (uint32_t b = 0; b < anim.m_frames.size(); b++)
+        {
+            Frame const& frame = anim.m_frames[b];
+            for (uint32_t c = 0; c < frame.m_objects.size(); c++)
+            {
+                Object const& object = frame.m_objects[c];
+                if (object.m_paletteIndex > 0x0F)
+                {
+                    _errorMsg = "Animation " + to_string(a) + " frame " + to_string(b) + " object " + to_string(c) + ": "
+                              + "BN sprite does not support palette index > 15";
+                    return false;
+                }
+            }
+        }
+    }
+
     FILE* f;
     _wfopen_s(&f, _fileName.c_str(), L"wb");
     if (!f)
@@ -1406,13 +1426,13 @@ bool BNSprite::SaveSF
             if (frame.m_subAnimations.size() > 1 ||
                 frame.m_subAnimations[0].m_subFrames.size() > 1)
             {
-                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ":"
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ": "
                           + "SF sprite does not support sub animations";
                 return false;
             }
             if (frame.m_objects.size() > 1)
             {
-                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ":"
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ": "
                           + "SF sprite does not support multiple object lists";
                 return false;
             }

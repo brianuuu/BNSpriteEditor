@@ -11,6 +11,7 @@
 #include <QtGui>
 
 #include "bnsprite.h"
+#include "buildoptiondialog.h"
 
 namespace Ui {
 class CustomSpriteManager;
@@ -43,7 +44,7 @@ signals:
     void BuildDataReady(int tilesetCount);
     void BuildCheckButton();
     void BuildPushFrame(int frame, bool newAnim);
-    void LoadProjectSignal(QString file, uint32_t fileVersion, qint64 skipByte, int tilesetCount);
+    void LoadProjectSignal(QString file, uint32_t saveVersion, qint64 skipByte, int tilesetCount);
     void SaveProjectSignal(QString file);
 
 private:
@@ -230,7 +231,6 @@ private slots:
     void on_Frame_LW_itemPressed(QListWidgetItem *item);
     void on_Frame_LW_itemDoubleClicked(QListWidgetItem *item);
     void on_Frame_PB_Delete_clicked();
-    void on_Frame_CB_Blank_toggled(bool checked);
 
     // Build
     void on_Build_PB_Sprite_clicked();
@@ -316,6 +316,8 @@ private:
     int m_currentFrame;
 
     // Build
+    bool m_emptyFrame;
+    bool m_evenOAM;
     QVector<Tileset> m_tilesets;
     QMap<int,int> m_frameToTilesetMap;
     QMap<int,BNSprite::Frame> m_cachedBNFrames;

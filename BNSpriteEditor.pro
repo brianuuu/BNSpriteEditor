@@ -17,6 +17,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     bnsprite.cpp \
+    buildoptiondialog.cpp \
     customspritemanager.cpp \
     main.cpp \
     bnspriteeditor.cpp \
@@ -28,6 +29,7 @@ SOURCES += \
 HEADERS += \
     bnsprite.h \
     bnspriteeditor.h \
+    buildoptiondialog.h \
     customspritemanager.h \
     listwidgetdropsignal.h \
     listwidgetignoreself.h \
@@ -38,6 +40,7 @@ HEADERS += \
 
 FORMS += \
     bnspriteeditor.ui \
+    buildoptiondialog.ui \
     customspritemanager.ui \
     paletteinfowidget.ui \
     paletteinfowindow.ui

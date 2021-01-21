@@ -5,9 +5,10 @@
 #define USE_FIRST_FIT_OAM 0
 
 // Save version
-static const uint32_t c_saveVersion = 2;
+static const uint32_t c_saveVersion = 3;
 // 1: initial save version
 // 2: fix for m_startTile changed from uint8_t to uint16_t
+// 3: added m_evenOAM
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -215,7 +216,7 @@ void CustomSpriteManager:: on_actionLoad_Project_triggered()
 
     ResetProgram();
 
-    // TODO: Load save version
+    // Load save version
     uint32_t saveVersion = 0;
     in >> saveVersion;
 
@@ -316,13 +317,15 @@ void CustomSpriteManager:: on_actionLoad_Project_triggered()
         qApp->processEvents();
     }
 
-    bool emptyFrame = false;
-    in >> emptyFrame;
-    ui->Frame_CB_Blank->setChecked(emptyFrame);
-    ui->Frame_CB_Blank->setEnabled(true);
-    if (emptyFrame)
+    in >> m_emptyFrame;
+    if (m_emptyFrame)
     {
         ui->Frame_LW->item(ui->Frame_LW->count() - 1)->setText("Empty Frame");
+    }
+
+    if (saveVersion >= 3)
+    {
+        in >> m_evenOAM;
     }
 
     // Load tileset
@@ -433,7 +436,8 @@ void CustomSpriteManager::on_actionSave_Project_triggered()
         out << ui->Frame_LW->item(i)->icon().pixmap(84,84);
     }
 
-    out << ui->Frame_CB_Blank->isChecked();
+    out << m_emptyFrame;
+    out << m_evenOAM;
 
     // Save tileset
     out << m_tilesets.size();
@@ -459,14 +463,14 @@ void CustomSpriteManager::ResetProgram()
     ResetBuild();
     BuildLayoutChange(false);
     ui->Build_PB_Sprite->setEnabled(false);
+    m_emptyFrame = false;
+    m_evenOAM = false;
 
     // Reset frames
     m_currentFrame = -1;
     m_frames.clear();
     ui->Frame_LW->clear();
     ui->Frame_PB_Delete->setEnabled(false);
-    ui->Frame_CB_Blank->setChecked(false);
-    ui->Frame_CB_Blank->setEnabled(false);
 
     // Init palette with at least one group
     m_paletteGroups.clear();
@@ -478,6 +482,7 @@ void CustomSpriteManager::ResetProgram()
     ui->Palette_GV->clear();
     ui->Palette_PB_NewGroup->setEnabled(false);
     ui->Palette_PB_DelGroup->setEnabled(false);
+    ui->Palette_PB_NewPal->setEnabled(true);
     ui->Palette_PB_DelPal->setEnabled(false);
     ui->Palette_SB_Index->setEnabled(false);
 
@@ -557,7 +562,6 @@ void CustomSpriteManager::BuildLayoutChange(bool buildComplete)
     ui->Build_Control_Group->setHidden(!buildComplete);
     ui->Build_PB_Sprite->setHidden(buildComplete);
 
-    ui->Frame_CB_Blank->setEnabled(!buildComplete);
     ui->Frame_PB_Delete->setHidden(buildComplete);
 
     ui->Preview_X->setHidden(buildComplete);
@@ -676,9 +680,20 @@ void CustomSpriteManager::on_Palette_PB_NewPal_clicked()
     QFileInfo info(files[0]);
     m_path = info.dir().absolutePath();
 
-    int group = ui->Palette_SB_Group->value();
-    bool success = GeneratePaletteFromFiles(files, group);
+    if (files.size() > 256)
+    {
+        QMessageBox::critical(this, "Error", "You cannot add more than 256 palettes in the same palette group!");
+        return;
+    }
 
+    int group = ui->Palette_SB_Group->value();
+    if (m_paletteGroups[group].size() + files.size() > 256)
+    {
+        QMessageBox::critical(this, "Error", "Maximum no. of palette is reached (256), please create new group instead!");
+        return;
+    }
+
+    bool success = GeneratePaletteFromFiles(files, group);
     if (success)
     {
         on_Palette_SB_Group_valueChanged(group);
@@ -723,8 +738,9 @@ void CustomSpriteManager::on_Palette_PB_DelPal_clicked()
 
     // Reload next palette if this is not the last palette
     ui->Palette_SB_Index->blockSignals(true);
-    ui->Palette_SB_Index->setMaximum(paletteGroup.size() - 1);
+    ui->Palette_SB_Index->setMaximum(qMin(paletteGroup.size() - 1, 255));
     ui->Palette_SB_Index->blockSignals(false);
+    ui->Palette_PB_NewPal->setEnabled(paletteGroup.size() < 256);
     if (index > paletteGroup.size() - 1)
     {
         index--;
@@ -752,6 +768,12 @@ void CustomSpriteManager::on_Palette_PB_NewGroup_clicked()
     // Save directory
     QFileInfo info(files[0]);
     m_path = info.dir().absolutePath();
+
+    if (files.size() > 256)
+    {
+        QMessageBox::critical(this, "Error", "You cannot add more than 256 palettes in the same palette group!");
+        return;
+    }
 
     // Create a group to push palette in
     m_paletteGroups.push_back(PaletteGroup());
@@ -828,8 +850,9 @@ void CustomSpriteManager::on_Palette_SB_Group_valueChanged(int arg1)
 {
     PaletteGroup const& paletteGroup = m_paletteGroups[arg1];
     ui->Palette_SB_Index->blockSignals(true);
-    ui->Palette_SB_Index->setMaximum(paletteGroup.size() - 1);
+    ui->Palette_SB_Index->setMaximum(qMin(paletteGroup.size() - 1, 255));
     ui->Palette_SB_Index->blockSignals(false);
+    ui->Palette_PB_NewPal->setEnabled(paletteGroup.size() < 256);
 
     UpdatePalettePreview();
     EnablePaletteWidgets();
@@ -837,20 +860,15 @@ void CustomSpriteManager::on_Palette_SB_Group_valueChanged(int arg1)
 
 void CustomSpriteManager::on_Palette_SB_Index_valueChanged(int arg1)
 {
-    QColor color;
+    // Show warning for BN sprites if index > 15
     if (arg1 > 15)
     {
-        color = QColor(255,80,80);
         ui->Palette_Warning->setHidden(false);
     }
     else
     {
-        color = QColor(255,255,255);
         ui->Palette_Warning->setHidden(true);
     }
-    QPalette pal = ui->Palette_SB_Index->palette();
-    pal.setColor(QPalette::Base, color);
-    ui->Palette_SB_Index->setPalette(pal);
     ui->Palette_GV->setPaletteSelected(arg1);
 
     SetResourcesSelectable();
@@ -905,7 +923,6 @@ bool CustomSpriteManager::GeneratePaletteFromFiles(const QStringList &files, int
         {
             ui->Palette_SB_Index->setEnabled(true);
             ui->Resources_PB_Add->setEnabled(true);
-            ui->Frame_CB_Blank->setEnabled(true);
         }
 
         // Check if any existing resource can use this palette
@@ -1106,7 +1123,7 @@ void CustomSpriteManager::EnablePaletteWidgets()
     bool editingLayer = !m_editingLayers.empty();
     ui->Palette_PB_NewGroup->setEnabled(!m_paletteGroups[0].empty() && !editingLayer);
     ui->Palette_PB_DelGroup->setEnabled(m_paletteGroups.size() > 1 && !editingLayer);
-    ui->Palette_PB_NewPal->setEnabled(true);
+    ui->Palette_PB_NewPal->setEnabled(m_paletteGroups[group].size() < 256);
     ui->Palette_PB_DelPal->setEnabled(m_paletteGroups[group].size() > 0 && !editingLayer);
     ui->Palette_SB_Group->setEnabled(!editingLayer);
     ui->Palette_SB_Index->setEnabled(m_paletteGroups[group].size() > 0 && !editingLayer);
@@ -1883,7 +1900,7 @@ void CustomSpriteManager::SetResourcesSelectable()
     for (int i = 0; i < m_resources.size(); i++)
     {
         Resource& resource = m_resources[i];
-        bool selectable = resource.m_paletteOwnerships.contains(ownership) && index <= 15;
+        bool selectable = resource.m_paletteOwnerships.contains(ownership);
         if (resource.m_selectable ^ selectable)
         {
             resource.m_selectable = selectable;
@@ -2613,18 +2630,6 @@ void CustomSpriteManager::on_Frame_PB_Delete_clicked()
     DeleteFrame(frameID);
 }
 
-void CustomSpriteManager::on_Frame_CB_Blank_toggled(bool checked)
-{
-    if (checked)
-    {
-        ui->Build_PB_Sprite->setEnabled(true);
-    }
-    else if (m_frames.empty())
-    {
-        ui->Build_PB_Sprite->setEnabled(false);
-    }
-}
-
 //---------------------------------------------------------------------------
 // Delete a frame
 //---------------------------------------------------------------------------
@@ -2663,6 +2668,16 @@ void CustomSpriteManager::DeleteFrame(int frameID)
 //---------------------------------------------------------------------------
 void CustomSpriteManager::on_Build_PB_Sprite_clicked()
 {
+    // Set build options
+    BuildOptionDialog dialog;
+    dialog.setEmptyFrame(m_emptyFrame);
+    dialog.setEvenOAM(m_evenOAM);
+    dialog.exec();
+
+    m_emptyFrame = dialog.getEmptyFrame();
+    m_evenOAM = dialog.getEvenOAM();
+    if (!dialog.getAccepted()) return;
+
     // Rebuild sprite if any changes is made
     ResetBuild();
 
@@ -2802,10 +2817,24 @@ void CustomSpriteManager::on_Build_PB_Sprite_clicked()
         Tileset& tileset = m_tilesets[tilesetID];
 
         // Check how many tile in the tileset
-        int tileCount = tileset.m_reserveShadow ? 1 : 0;
+        int tileCount = tileset.m_reserveShadow ? (m_evenOAM ? 2 : 1) : 0;
         for (int const& resourceID : tileset.m_resourceIDs)
         {
-            tileCount += m_resources[resourceID].m_tileCount;
+            Resource const& r = m_resources[resourceID];
+            tileCount += r.m_tileCount;
+
+            // If need even OAM, add 1 tile for each 8x8
+            if (m_evenOAM)
+            {
+                for (OAMInfo const& info : r.m_oamInfoList)
+                {
+                    QSize size = m_oamSizesMap[info.m_oamSize];
+                    if (size == QSize(1,1))
+                    {
+                        tileCount++;
+                    }
+                }
+            }
         }
 
         // 255 is the limit!
@@ -2840,7 +2869,7 @@ void CustomSpriteManager::on_Build_PB_Sprite_clicked()
         Palette const& palette = m_paletteGroups[tileset.m_palGroup][tileset.m_palIndex];
 
         // Sample OAM for each resource
-        int tileDataPixel = tileset.m_reserveShadow ? 64 : 0;
+        int tileDataPixel = tileset.m_reserveShadow ? (m_evenOAM ? 128 : 64) : 0;
         for (int const& resourceID : tileset.m_resourceIDs)
         {
             QMap<QRgb,int> colorToIndexMap;
@@ -2879,18 +2908,24 @@ void CustomSpriteManager::on_Build_PB_Sprite_clicked()
                         }
                     }
                 }
+
+                // If need even OAM, skip 8x8 tile (64 pixels)
+                if (m_evenOAM && size == QSize(1,1))
+                {
+                    tileDataPixel += 64;
+                }
             }
         }
         Q_ASSERT(tileDataPixel == tileset.m_tileData.size());
     }
 
     // Add a 8x8 tileset empty frame
-    if (ui->Frame_CB_Blank->isChecked())
+    if (m_emptyFrame)
     {
         Frame emptyFrame;
         emptyFrame.m_palGroup = 0;
         emptyFrame.m_palIndex = 0;
-        emptyFrame.m_shadowType = ST_NONE;
+        emptyFrame.m_shadowType = ST_RESERVED; // use reserved to force an 8x8 in
         m_frames.push_back(emptyFrame);
 
         Tileset emptyTileset;
@@ -2939,7 +2974,7 @@ void CustomSpriteManager::on_Build_PB_Resume_clicked()
     }
 
     // Remove the empty frame
-    if (ui->Frame_CB_Blank->isChecked())
+    if (m_emptyFrame)
     {
         m_frames.pop_back();
         m_tilesets.pop_back();
@@ -3024,11 +3059,24 @@ void CustomSpriteManager::GetFrameData(int frameID, BNSprite::Frame &bnFrame)
         Q_ASSERT(resourcePosInTileset != -1);
 
         // Find the start tile of the OAM
-        int tileStart = tileset.m_reserveShadow ? 1 : 0;
+        int tileStart = tileset.m_reserveShadow ? (m_evenOAM ? 2 : 1) : 0;
         for (int i = 0; i < resourcePosInTileset; i++)
         {
             Resource const& r = m_resources[tileset.m_resourceIDs.at(i)];
             tileStart += r.m_tileCount;
+
+            // If need even OAM, add 1 tile for each 8x8
+            if (m_evenOAM)
+            {
+                for (OAMInfo const& info : r.m_oamInfoList)
+                {
+                    QSize size = m_oamSizesMap[info.m_oamSize];
+                    if (size == QSize(1,1))
+                    {
+                        tileStart++;
+                    }
+                }
+            }
         }
 
         // Add sub object for each OAM
@@ -3049,6 +3097,12 @@ void CustomSpriteManager::GetFrameData(int frameID, BNSprite::Frame &bnFrame)
             object.m_subObjects.push_back(subObject);
 
             tileStart += size.width() * size.height();
+
+            // If need even OAM, skip 8x8 tile
+            if (m_evenOAM && size == QSize(1,1))
+            {
+                tileStart++;
+            }
         }
     }
     bnFrame.m_objects.push_back(object);
