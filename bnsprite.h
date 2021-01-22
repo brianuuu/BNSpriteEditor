@@ -125,6 +125,9 @@ public:
     // Merge with another sprite
     bool Merge(BNSprite const& _other, string& _errorMsg);
 
+    // Fix BN sprite to SF
+    bool ConvertBNtoSF(bool& _modified, string& _errorMsg);
+
     // Helper
     int GetAnimationCount() { return m_animations.size(); }
     int GetAnimationFrameCount(int _animID) { return m_animations[_animID].m_frames.size(); }

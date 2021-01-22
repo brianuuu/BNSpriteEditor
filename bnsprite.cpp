@@ -1719,6 +1719,189 @@ bool BNSprite::Merge
 }
 
 //-----------------------------------------------------
+// Convert BN sprite to be compatible with SF sprite
+//
+//-----------------------------------------------------
+bool BNSprite::ConvertBNtoSF
+(
+    bool &_modified,
+    string& _errorMsg
+)
+{
+    if (!m_loaded)
+    {
+        _errorMsg = "Not loaded";
+        return false;
+    }
+
+    _modified = false;
+
+    // SF doesn't support sub animations or multiple objects
+    for (uint32_t i = 0; i < m_animations.size(); i++)
+    {
+        Animation const& anim = m_animations[i];
+        for (uint32_t j = 0; j < anim.m_frames.size(); j++)
+        {
+            Frame const& frame = anim.m_frames[j];
+            if (frame.m_subAnimations.size() > 1 || frame.m_subAnimations[0].m_subFrames.size() > 1)
+            {
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ": "
+                          + "SF sprite does not support sub animations";
+                return false;
+            }
+            if (frame.m_objects.size() > 1)
+            {
+                _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ": "
+                          + "SF sprite does not support multiple object lists";
+                return false;
+            }
+        }
+    }
+
+    // Combine all palette group into one
+    if (m_paletteGroups.size() > 1)
+    {
+        uint16_t paletteCount = 0;
+        vector<uint16_t> paletteStart;
+
+        for (PaletteGroup const& palGroup : m_paletteGroups)
+        {
+            paletteStart.push_back(paletteCount);
+            paletteCount += palGroup.m_palettes.size();
+        }
+
+        if (paletteCount > 256)
+        {
+            _errorMsg = "There are more than 256 palettes, cannot combine them into one group.";
+            return false;
+        }
+
+        _modified = true;
+
+        // Combine palettes and leave the first one
+        PaletteGroup& palGroupFirst = m_paletteGroups[0];
+        for (uint32_t i = 1; i < m_paletteGroups.size(); i++)
+        {
+            PaletteGroup const& palGroup = m_paletteGroups[i];
+            for (Palette const& pal : palGroup.m_palettes)
+            {
+                palGroupFirst.m_palettes.push_back(pal);
+            }
+        }
+        m_paletteGroups.resize(1);
+
+        // Fix palette group and index for all frames
+        for (Animation& anim : m_animations)
+        {
+            for (Frame& frame : anim.m_frames)
+            {
+                uint32_t const groupID = frame.m_paletteGroupID;
+                if (groupID == 0)
+                {
+                    continue;
+                }
+
+                for (Object& obj : frame.m_objects)
+                {
+                    obj.m_paletteIndex += paletteStart[groupID];
+                }
+
+                frame.m_paletteGroupID = 0;
+            }
+        }
+    }
+
+    typedef vector<uint16_t> OddOAMList;
+    vector<OddOAMList> listPerTileset;
+    listPerTileset.resize(m_tilesets.size());
+
+    // Find all odd number OAMs
+    for (Animation const& anim : m_animations)
+    {
+        for (Frame const& frame : anim.m_frames)
+        {
+            OddOAMList& list = listPerTileset[frame.m_tilesetID];
+            Object const& obj = frame.m_objects[0];
+
+            // Get a list of unique m_startTile and sort them (accending)
+            vector<uint16_t> startTiles;
+            for (SubObject const& subObj : obj.m_subObjects)
+            {
+                auto it = find(startTiles.begin(), startTiles.end(), subObj.m_startTile);
+                if (it == startTiles.end())
+                {
+                    startTiles.push_back(subObj.m_startTile);
+                }
+            }
+            sort(startTiles.begin(), startTiles.end());
+
+            bool odd = true;
+            for (uint16_t const& startTile : startTiles)
+            {
+                if (startTile % 2 == odd)
+                {
+                    // toggle because when we insert tile, all OAM shifts
+                    odd = !odd;
+
+                    auto it = find(list.begin(), list.end(), startTile);
+                    if (it == list.end())
+                    {
+                        _modified = true;
+                        list.push_back(startTile);
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort the OAM list
+    for (OddOAMList& list : listPerTileset)
+    {
+        if (!list.empty())
+        {
+            sort(list.begin(), list.end());
+        }
+    }
+
+    // Pad 8x8 before them (start from the back)
+    for(uint32_t i = 0; i < m_tilesets.size(); i++)
+    {
+        Tileset& tileset = m_tilesets[i];
+        OddOAMList const& list = listPerTileset[i];
+        for (int j = list.size() - 1; j >= 0; j--)
+        {
+            uint16_t const tileStart = list[j];
+            tileset.m_data.insert(tileset.m_data.begin() + tileStart * 32, 32, 0);
+        }
+    }
+
+    // Fix OAM to even numbers
+    for (Animation& anim : m_animations)
+    {
+        for (Frame& frame : anim.m_frames)
+        {
+            OddOAMList const& list = listPerTileset[frame.m_tilesetID];
+            Object& obj = frame.m_objects[0];
+            for (SubObject& subObj : obj.m_subObjects)
+            {
+                uint16_t tileToAdd = 0;
+                for (uint16_t const& oddOAMTileStart : list)
+                {
+                    if (oddOAMTileStart <= subObj.m_startTile)
+                    {
+                        tileToAdd++;
+                    }
+                }
+                subObj.m_startTile += tileToAdd;
+                assert(subObj.m_startTile % 2 == 0);
+            }
+        }
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------
 // Get all frames in an animation
 //-----------------------------------------------------
 void BNSprite::GetAnimationFrames

@@ -50,6 +50,7 @@ private slots:
     void on_actionAbout_BNSpriteEditor_triggered();
     void on_actionAbout_Qt_triggered();
     void on_actionCustom_Sprite_Manager_triggered();
+    void on_actionConvert_Sprite_to_be_Compatible_with_SF_triggered();
 
     // Animation
     void on_Anim_LW_currentItemChanged(QListWidgetItem *current, QListWidgetItem *previous);
@@ -147,7 +148,7 @@ private slots:
     void on_CSM_SaveProject_pressed(QString file);
 
 private:
-    void ResetProgram();
+    void ResetProgram(bool clearSprite = true);
     void ResetAnim();
     void ResetFrame();
     void ResetOthers();
@@ -156,6 +157,7 @@ private:
 
     void ImportSprite(bool isSFSprite);
     void ExportSprite(bool isSFSprite);
+    void LoadSpriteToUI();
 
     // Thumbnails
     QImage* GetFrameImage(BNSprite::Frame const& _frame, bool _isThumbnail, int _subAnimID = 0, int _subFrameID = 0);

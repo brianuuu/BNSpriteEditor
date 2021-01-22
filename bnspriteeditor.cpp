@@ -215,32 +215,38 @@ void BNSpriteEditor::ImportSprite(bool isSFSprite)
     }
     else
     {
-        // Get all palettes from sprite
-        m_paletteGroups.clear();
-        vector<BNSprite::PaletteGroup> paletteGroups;
-        m_sprite.GetAllPaletteGroups(paletteGroups);
-        for (BNSprite::PaletteGroup const& group : paletteGroups)
-        {
-            AddPaletteGroupFromSprite(group);
-        }
-
-        // Set palette group limit
-        ui->Palette_SB_Group->setValue(0);
-        ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
-
-        // Generate thumbnails from the first frame of all animations
-        int animationCount = m_sprite.GetAnimationCount();
-        for (int i = 0; i < animationCount; i++)
-        {
-            AddAnimationThumbnail(i);
-            qApp->processEvents();
-        }
-
-        // Enable buttons
-        ui->Anim_PB_New->setEnabled(ui->Anim_LW->count() < 255);
-
+        LoadSpriteToUI();
         QMessageBox::information(this, "Open", "File load successful!", QMessageBox::Ok);
     }
+}
+
+void BNSpriteEditor::LoadSpriteToUI()
+{
+    Q_ASSERT(m_sprite.IsLoaded());
+
+    // Get all palettes from sprite
+    m_paletteGroups.clear();
+    vector<BNSprite::PaletteGroup> paletteGroups;
+    m_sprite.GetAllPaletteGroups(paletteGroups);
+    for (BNSprite::PaletteGroup const& group : paletteGroups)
+    {
+        AddPaletteGroupFromSprite(group);
+    }
+
+    // Set palette group limit
+    ui->Palette_SB_Group->setValue(0);
+    ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
+
+    // Generate thumbnails from the first frame of all animations
+    int animationCount = m_sprite.GetAnimationCount();
+    for (int i = 0; i < animationCount; i++)
+    {
+        AddAnimationThumbnail(i);
+        qApp->processEvents();
+    }
+
+    // Enable buttons
+    ui->Anim_PB_New->setEnabled(ui->Anim_LW->count() < 255);
 }
 
 void BNSpriteEditor::on_actionExport_Sprite_triggered()
@@ -644,10 +650,48 @@ void BNSpriteEditor::on_actionCustom_Sprite_Manager_triggered()
     m_csm->raise();
 }
 
+void BNSpriteEditor::on_actionConvert_Sprite_to_be_Compatible_with_SF_triggered()
+{
+    if (!m_sprite.IsLoaded())
+    {
+        return;
+    }
+
+    QMessageBox::StandardButton resBtn = QMessageBox::Yes;
+    QString message = "Convert current sprite to be compatible to SF Sprite Format?";
+    message += "\n*Combine all palette groups into one";
+    message += "\n*Use only OAMs with even number tile start index";
+    resBtn = QMessageBox::information(this, "Convert to SF", message, QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (resBtn == QMessageBox::No)
+    {
+        return;
+    }
+
+    bool modified = false;
+    string errorMsg;
+    if (m_sprite.ConvertBNtoSF(modified, errorMsg))
+    {
+        if (modified)
+        {
+            ResetProgram(false);
+            LoadSpriteToUI();
+            QMessageBox::information(this, "Convert to SF", "Conversion completed!", QMessageBox::Ok);
+        }
+        else
+        {
+            QMessageBox::information(this, "Convert to SF", "Sprite is already compatible with SF.", QMessageBox::Ok);
+        }
+    }
+    else
+    {
+        QMessageBox::critical(this, "Error", QString::fromStdString(errorMsg), QMessageBox::Ok);
+    }
+}
+
 //---------------------------------------------------------------------------
 // Resetting all buttons and data
 //---------------------------------------------------------------------------
-void BNSpriteEditor::ResetProgram()
+void BNSpriteEditor::ResetProgram(bool clearSprite)
 {
     // Focus on something else otherwise default focus on Anim_LW/Frame_LW messes things up???
     ui->Preview_GV->setFocus();
@@ -669,8 +713,11 @@ void BNSpriteEditor::ResetProgram()
     ResetFrame();
     ResetAnim();
 
-    ui->Sprite_Name->setText("");
-    m_sprite.Clear();
+    if (clearSprite)
+    {
+        ui->Sprite_Name->setText("");
+        m_sprite.Clear();
+    }
 }
 
 void BNSpriteEditor::ResetAnim()

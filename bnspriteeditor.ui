@@ -2270,6 +2270,7 @@
     </property>
     <addaction name="actionCustom_Sprite_Manager"/>
     <addaction name="actionMerge_Sprite"/>
+    <addaction name="actionConvert_Sprite_to_be_Compatible_with_SF"/>
     <addaction name="actionExport_Sprite_as_Single_PNG"/>
     <addaction name="actionExport_Sprite_as_Individual_PNG"/>
    </widget>
@@ -2365,6 +2366,11 @@
   <action name="actionExport_SF_Sprite">
    <property name="text">
     <string>Export SF Sprite...</string>
+   </property>
+  </action>
+  <action name="actionConvert_Sprite_to_be_Compatible_with_SF">
+   <property name="text">
+    <string>Convert Sprite to be Compatible with SF...</string>
    </property>
   </action>
  </widget>
