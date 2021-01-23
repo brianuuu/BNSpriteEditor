@@ -1205,8 +1205,8 @@ bool BNSprite::SaveBN
     objectGroupPtrs.reserve(totalFrameCount);
     for (uint32_t i = 0; i < m_animations.size(); i++)
     {
-        Animation const& anim = m_animations[i];
-        for (Frame const& frame : anim.m_frames)
+        Animation& anim = m_animations[i];
+        for (Frame& frame : anim.m_frames)
         {
             uint32_t objectGroupPtr = ftell(f);
             objectGroupPtrs.push_back(objectGroupPtr - 0x04);
@@ -1217,7 +1217,7 @@ bool BNSprite::SaveBN
             // Write sub objects
             vector<uint32_t> objectPtrs;
             objectPtrs.reserve(frame.m_objects.size());
-            for (Object const& object : frame.m_objects)
+            for (Object& object : frame.m_objects)
             {
                 objectPtrs.push_back(ftell(f) - objectGroupPtr);
                 for (uint32_t j = 0; j < object.m_subObjects.size(); j++)
@@ -1304,6 +1304,13 @@ bool BNSprite::SaveBN
                         flag1 |= 0x40;
                     }
                     WriteByte(f, flag1);
+
+                    // clamp the palette index within no. of palettes in the group
+                    uint32_t paletteGroupSize = m_paletteGroups[frame.m_paletteGroupID].m_palettes.size();
+                    if (object.m_paletteIndex >= paletteGroupSize)
+                    {
+                        object.m_paletteIndex = paletteGroupSize - 1;
+                    }
 
                     uint8_t flag2 = shape;
                     assert(object.m_paletteIndex <= 0x0F);
@@ -1414,13 +1421,13 @@ bool BNSprite::SaveSF
     size_t tsetSizeTotal = 0;
     for (size_t i = 0; i < m_animations.size(); i++)
     {
-        Animation anim = m_animations[i];
+        Animation const& anim = m_animations[i];
         vector<size_t> animSpriteIdxes;
         animSpriteIdxes.reserve(anim.m_frames.size());
 
         for (size_t j = 0; j < anim.m_frames.size(); j++)
         {
-            Frame frame = anim.m_frames[j];
+            Frame const& frame = anim.m_frames[j];
 
             // Check if sprite is valid for SF
             if (frame.m_subAnimations.size() > 1 ||
@@ -1486,8 +1493,8 @@ bool BNSprite::SaveSF
 
                     for (size_t j = 0; j < frame.m_objects[i].m_subObjects.size(); j++)
                     {
-                        SubObject a = frame.m_objects[i].m_subObjects[j];
-                        SubObject b = x.m_objects[i].m_subObjects[j];
+                        SubObject const& a = frame.m_objects[i].m_subObjects[j];
+                        SubObject const& b = x.m_objects[i].m_subObjects[j];
 
                         if (a.m_startTile != b.m_startTile ||
                             a.m_posX != b.m_posX ||
@@ -1544,7 +1551,7 @@ bool BNSprite::SaveSF
     WriteShort(f, tsetSizeTotal);
     WriteShort(f, 0x8 + sprites.size() * 0x4); // header size
     AlignFourBytes(f);
-    for (Frame sprite : sprites)
+    for (Frame const& sprite : sprites)
     {
         TilesetInfo entry = tsetEntries[tsetIdxes[sprite.m_tilesetID]];
         WriteShort(f, entry.tileCount);
@@ -1552,9 +1559,9 @@ bool BNSprite::SaveSF
     }
 
     // Write tilesets
-    for (Tileset tset : tsets)
+    for (Tileset const& tset : tsets)
     {
-        for (uint8_t b : tset.m_data)
+        for (uint8_t const& b : tset.m_data)
         {
             WriteByte(f, b);
         }
@@ -1567,9 +1574,9 @@ bool BNSprite::SaveSF
     WriteShort(f, 0x10); // palette size
 
     // Write palettes
-    for (Palette pal : m_paletteGroups[0].m_palettes)
+    for (Palette const& pal : m_paletteGroups[0].m_palettes)
     {
-        for (uint16_t c : pal.m_colors)
+        for (uint16_t const& c : pal.m_colors)
         {
             WriteShort(f, c);
         }
@@ -1581,7 +1588,7 @@ bool BNSprite::SaveSF
     WriteShort(f, m_animations.size());
     AlignFourBytes(f);
     uint32_t animPtr = 0x4 + m_animations.size() * 0x4;
-    for (Animation anim : m_animations)
+    for (Animation const& anim : m_animations)
     {
         WriteInt(f, animPtr);
         animPtr += anim.m_frames.size() * 0x4;
@@ -1590,10 +1597,10 @@ bool BNSprite::SaveSF
     // Write animations
     for (size_t i = 0; i < m_animations.size(); i++)
     {
-        Animation anim = m_animations[i];
+        Animation& anim = m_animations[i];
         for (size_t j = 0; j < anim.m_frames.size(); j++)
         {
-            Frame frame = anim.m_frames[j];
+            Frame& frame = anim.m_frames[j];
             size_t sprIdx = spriteIdxes[i][j];
 
             WriteByte(f, sprIdx);
@@ -1606,7 +1613,15 @@ bool BNSprite::SaveSF
             {
                 WriteByte(f, 0x00);
             }
-            WriteByte(f, frame.m_objects[0].m_paletteIndex);
+
+            // clamp the palette index within no. of palettes in the group
+            uint32_t paletteGroupSize = m_paletteGroups[0].m_palettes.size();
+            uint8_t& paletteIndex = frame.m_objects[0].m_paletteIndex;
+            if (paletteIndex >= paletteGroupSize)
+            {
+                paletteIndex = paletteGroupSize - 1;
+            }
+            WriteByte(f, paletteIndex);
         }
     }
     AlignFourBytes(f);
@@ -1616,19 +1631,19 @@ bool BNSprite::SaveSF
     WriteShort(f, sprites.size());
     AlignFourBytes(f);
     uint32_t spritePtr = 0x4 + sprites.size() * 0x4;
-    for (Frame sprite : sprites)
+    for (Frame const& sprite : sprites)
     {
         WriteInt(f, spritePtr);
         spritePtr += sprite.m_objects[0].m_subObjects.size() * 0x8;
     }
 
     // Write sprites
-    for (Frame sprite : sprites)
+    for (Frame const& sprite : sprites)
     {
-        vector<SubObject> &subObjs = sprite.m_objects[0].m_subObjects;
+        vector<SubObject> const& subObjs = sprite.m_objects[0].m_subObjects;
         for (size_t i = 0; i < subObjs.size(); i++)
         {
-            SubObject subObj = subObjs[i];
+            SubObject const& subObj = subObjs[i];
 
             uint8_t size = 0;
             uint8_t shape = 0;
