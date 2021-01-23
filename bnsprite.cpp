@@ -1758,6 +1758,13 @@ bool BNSprite::ConvertBNtoSF
         }
     }
 
+    // For custom sprites, palette group is empty until export
+    if (m_paletteGroups.empty())
+    {
+        _errorMsg = "Please export sprite before converting!";
+        return false;
+    }
+
     // Combine all palette group into one
     if (m_paletteGroups.size() > 1)
     {

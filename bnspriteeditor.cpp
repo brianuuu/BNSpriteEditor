@@ -657,6 +657,13 @@ void BNSpriteEditor::on_actionConvert_Sprite_to_be_Compatible_with_SF_triggered(
         return;
     }
 
+    bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
+    if (csmActive)
+    {
+        QMessageBox::critical(this, "Error", "You should not use this while making custom sprites, set this in build option instead.", QMessageBox::Ok);
+        return;
+    }
+
     QMessageBox::StandardButton resBtn = QMessageBox::Yes;
     QString message = "Convert current sprite to be compatible to SF Sprite Format?";
     message += "\n*Combine all palette groups into one";
