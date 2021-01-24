@@ -614,7 +614,7 @@ void BNSpriteEditor::on_actionAbout_BNSpriteEditor_triggered()
     message += "\nCreated by brianuuu 2020";
     message += "\nYoutube: brianuuuSonic Reborn";
     message += "\n\nContributors:";
-    message += "\nProf.9";
+    message += "\nProf. 9";
     QMessageBox::information(this, "About BNSpriteEditor", message, QMessageBox::Ok);
 }
 
