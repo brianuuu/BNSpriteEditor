@@ -16,6 +16,7 @@
 
 #include "bnsprite.h"
 #include "customspritemanager.h"
+#include "palettecontextmenu.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class BNSpriteEditor; }
@@ -99,9 +100,20 @@ private slots:
     // Palette
     void on_Palette_SB_Group_valueChanged(int arg1);
     void on_Palette_SB_Index_valueChanged(int arg1);
-    void on_Palette_PB_New_clicked();
-    void on_Palette_PB_Del_clicked();
+    void on_Palette_PB_Up_pressed();
+    void on_Palette_PB_Down_pressed();
+    void on_Palette_PB_Import_pressed();
+    void on_Palette_PB_Export_pressed();
     void on_Palette_Color_changed(int paletteIndex, int colorIndex, QRgb color);
+
+    void on_PaletteContexMenu_requested(int paletteIndex, int colorIndex, QPoint pos);
+    void on_PaletteContexMenu_colorCopied();
+    void on_PaletteContexMenu_colorReplaced();
+    void on_PaletteContexMenu_paletteCopied();
+    void on_PaletteContexMenu_paletteReplaced();
+    void on_PaletteContexMenu_paletteInsertAbove();
+    void on_PaletteContexMenu_paletteInsertBelow();
+    void on_PaletteContexMenu_paletteDeleted();
 
     // Object
     void on_Object_Tabs_currentChanged(int index);
@@ -155,8 +167,10 @@ private:
     void ResetOAM();
     void ResetSubFrame();
 
+    bool IsCustomSpriteMakerActive() { return m_csm && m_csm->isVisible(); }
     void ImportSprite(bool isSFSprite);
     void ExportSprite(bool isSFSprite);
+    void ReplacePaletteInSprite();
     void LoadSpriteToUI();
 
     // Thumbnails
@@ -204,6 +218,10 @@ private:
     void AddPaletteGroupFromSprite(BNSprite::PaletteGroup const& paletteGroup);
     void SetPaletteSelected(int index);
     void UpdatePalettePreview();
+    void SwapPalette(int id1, int id2);
+    void InsertPalette(int insertAt, Palette const palette);
+    void DeletePalette(int paletteIndex);
+    void UpdateAllThumbnails(int paletteIndex, bool redrawAll = false);
 
 private:
     Ui::BNSpriteEditor *ui;
@@ -215,6 +233,9 @@ private:
     BNSprite m_sprite;
     BNSprite m_spriteMerge;
     QString m_path;
+
+    // Palette
+    PaletteContextMenu* m_paletteContextMenu;
 
     // Thumbnails
     QVector<QImage*> m_animThumbnails;

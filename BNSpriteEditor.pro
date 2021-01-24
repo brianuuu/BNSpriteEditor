@@ -21,6 +21,7 @@ SOURCES += \
     customspritemanager.cpp \
     main.cpp \
     bnspriteeditor.cpp \
+    palettecontextmenu.cpp \
     palettegraphicsview.cpp \
     paletteinfowidget.cpp \
     paletteinfowindow.cpp \
@@ -33,6 +34,7 @@ HEADERS += \
     customspritemanager.h \
     listwidgetdropsignal.h \
     listwidgetignoreself.h \
+    palettecontextmenu.h \
     palettegraphicsview.h \
     paletteinfowidget.h \
     paletteinfowindow.h \

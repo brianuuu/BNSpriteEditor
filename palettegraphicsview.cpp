@@ -45,7 +45,7 @@ PaletteGraphicsView::~PaletteGraphicsView()
     clear();
 }
 
-void PaletteGraphicsView::addPalette(Palette palette)
+void PaletteGraphicsView::addPalette(Palette palette, int insertAt)
 {
     // Make sure size is 16
     while (palette.size() > 16)
@@ -56,7 +56,6 @@ void PaletteGraphicsView::addPalette(Palette palette)
     {
         palette.push_back(0xFF000000);
     }
-
     palette.push_back(c_unselected);    // 16
 
     QImage* image = new QImage(c_width, c_size, QImage::Format_Indexed8);
@@ -76,11 +75,33 @@ void PaletteGraphicsView::addPalette(Palette palette)
             }
         }
     }
-    m_images.push_back(image);
+    if (insertAt == -1 || insertAt > m_images.size())
+    {
+        m_images.push_back(image);
+    }
+    else
+    {
+        m_images.insert(insertAt, image);
+    }
 
     QGraphicsPixmapItem* item = m_graphicsScene->addPixmap(QPixmap::fromImage(*image));
-    item->setPos(0, (m_images.size() - 1) * c_size);
-    m_pixmapItems.push_back(item);
+    if (insertAt == -1 || insertAt > m_pixmapItems.size())
+    {
+        m_pixmapItems.push_back(item);
+        item->setPos(0, (m_images.size() - 1) * c_size);
+    }
+    else
+    {
+        m_pixmapItems.insert(insertAt, item);
+        item->setPos(0, insertAt * c_size);
+
+        // Shift everything after this index down
+        for (int i = insertAt + 1 ; i < m_pixmapItems.size(); i++)
+        {
+            QGraphicsPixmapItem* t = m_pixmapItems[i];
+            t->moveBy(0, c_size);
+        }
+    }
 
     m_graphicsScene->setSceneRect(0, 0, c_width, m_images.size() * 16);
 }
@@ -164,6 +185,51 @@ void PaletteGraphicsView::clear()
     m_highlight->setVisible(false);
 }
 
+void PaletteGraphicsView::replaceColor(int paletteIndex, int colorIndex, QRgb color)
+{
+    QImage* image = m_images[paletteIndex];
+    Palette palette = image->colorTable();
+
+    // Update color (covert it back and forth to round for GBA color)
+    color = BNSprite::ClampRGB(color);
+    palette[colorIndex] = color;
+
+    image->setColorTable(palette);
+    m_pixmapItems[paletteIndex]->setPixmap(QPixmap::fromImage(*image));
+}
+
+void PaletteGraphicsView::replacePalette(int paletteIndex, Palette palette)
+{
+    if (paletteIndex >= m_images.size()) return;
+
+    // Make sure size is 16
+    while (palette.size() > 16)
+    {
+        palette.pop_back();
+    }
+    while (palette.size() < 16)
+    {
+        palette.push_back(0xFF000000);
+    }
+    palette.push_back(c_unselected);    // 16
+
+    QImage* image = m_images[paletteIndex];
+    image->setColorTable(palette);
+
+    QGraphicsPixmapItem* item = m_pixmapItems[paletteIndex];
+    item->setPixmap(QPixmap::fromImage(*image));
+}
+
+void PaletteGraphicsView::swapPalette(int id1, int id2)
+{
+    qSwap(m_images[id1], m_images[id2]);
+    qSwap(m_pixmapItems[id1], m_pixmapItems[id2]);
+
+    QPointF tempPos = m_pixmapItems[id1]->pos();
+    m_pixmapItems[id1]->setPos(m_pixmapItems[id2]->pos());
+    m_pixmapItems[id2]->setPos(tempPos);
+}
+
 void PaletteGraphicsView::closeInfo()
 {
     m_infoWindow->close();
@@ -196,19 +262,22 @@ void PaletteGraphicsView::mousePressEvent(QMouseEvent *event)
             int paletteIndex = pos.y() / c_size;
             int colorIndex = (pos.x() - 1) / (c_size - 1);
 
-            QImage* image = m_images[paletteIndex];
-            Palette palette = image->colorTable();
-            QRgb& color = palette[colorIndex];
-            QColor newColor = QColorDialog::getColor(QColor(color), this, "Pick a Color");
-            if (newColor.isValid())
+            if (event->button() == Qt::LeftButton)
             {
-                // Update color (covert it back and forth to round for GBA color)
-                color = BNSprite::ClampRGB(newColor.rgb());
-                image->setColorTable(palette);
-                m_pixmapItems[paletteIndex]->setPixmap(QPixmap::fromImage(*image));
+                QImage const* image = m_images[paletteIndex];
+                Palette const palette = image->colorTable();
+                QRgb const color = palette[colorIndex];
+                QColor const newColor = QColorDialog::getColor(QColor(color), this, "Pick a Color");
+                if (newColor.isValid())
+                {
+                    replaceColor(paletteIndex, colorIndex, newColor.rgb());
+                    emit colorChanged(paletteIndex, colorIndex, color);
+                }
             }
-
-            emit colorChanged(paletteIndex, colorIndex, color);
+            else if (event->button() == Qt::RightButton)
+            {
+                emit paletteContextMenuRequested(paletteIndex, colorIndex, this->mapToGlobal(event->pos()));
+            }
         }
     }
 
@@ -235,6 +304,12 @@ void PaletteGraphicsView::updateInfo()
     {
         int paletteIndex = pos.y() / c_size;
         int colorIndex = (pos.x() - 1) / (c_size - 1);
+
+        if (paletteIndex >= m_images.size() || colorIndex > 15)
+        {
+            closeInfo();
+            return;
+        }
 
         QImage* image = m_images[paletteIndex];
         Palette const palette = image->colorTable();

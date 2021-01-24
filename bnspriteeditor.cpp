@@ -5,6 +5,7 @@
 #define IMPORT_EXTENSIONS_SF "SF Sprite (*.sfsa *.sfsprite *.bin);;All files (*.*)"
 #define EXPORT_EXTENSIONS "Memory Dump (*.dmp);;BN Sprite (*.bnsa *.bnsprite);;All files (*.*)"
 #define EXPORT_EXTENSIONS_SF "Memory Dump (*.bin);;SF Sprite (*.sfsa *.sfsprite);;All files (*.*)"
+#define PALETTE_EXTENSIONS "Palette File (*.pal);;All files (*.*)"
 
 static const QString c_programVersion = "v0.3.0";
 
@@ -74,8 +75,17 @@ BNSpriteEditor::BNSpriteEditor(QWidget *parent)
 
     connect(ui->Preview_GV, SIGNAL(previewScreenPressed(QPoint)), this, SLOT(on_Preview_pressed(QPoint)));
     connect(ui->Palette_GV, SIGNAL(colorChanged(int,int,QRgb)), this, SLOT(on_Palette_Color_changed(int,int,QRgb)));
-
     ui->Palette_Warning->setHidden(true);
+    m_paletteContextMenu = new PaletteContextMenu(this);
+    this->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(ui->Palette_GV, &PaletteGraphicsView::paletteContextMenuRequested, this, &BNSpriteEditor::on_PaletteContexMenu_requested);
+    connect(m_paletteContextMenu->copyColorAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_colorCopied);
+    connect(m_paletteContextMenu->replaceColorAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_colorReplaced);
+    connect(m_paletteContextMenu->copyPaletteAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteCopied);
+    connect(m_paletteContextMenu->replacePaletteAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteReplaced);
+    connect(m_paletteContextMenu->insertAboveAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteInsertAbove);
+    connect(m_paletteContextMenu->insertBelowAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow);
+    connect(m_paletteContextMenu->deletePaletteAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteDeleted);
 }
 
 //---------------------------------------------------------------------------
@@ -278,25 +288,7 @@ void BNSpriteEditor::ExportSprite(bool isSFSprite)
     m_path = info.dir().absolutePath();
 
     // Overwrite palette
-    vector<BNSprite::PaletteGroup> paletteGroups;
-    for (PaletteGroup const& group : m_paletteGroups)
-    {
-        BNSprite::PaletteGroup groupCopy;
-        for (Palette const& pal : group)
-        {
-            BNSprite::Palette palCopy;
-            // TODO: 256 color support
-            for (uint32_t i = 0; i < 16; i++)
-            {
-                uint32_t const& rgb = pal[i];
-                uint16_t col = BNSprite::RGBtoGBA(rgb);
-                palCopy.m_colors.push_back(col);
-            }
-            groupCopy.m_palettes.push_back(palCopy);
-        }
-        paletteGroups.push_back(groupCopy);
-    }
-    m_sprite.ReplaceAllPaletteGroups(paletteGroups);
+    ReplacePaletteInSprite();
 
     // Save BN sprite file
     string errorMsg;
@@ -318,6 +310,29 @@ void BNSpriteEditor::ExportSprite(bool isSFSprite)
     {
         QMessageBox::information(this, "Export", "Sprite has been exported!", QMessageBox::Ok);
     }
+}
+
+void BNSpriteEditor::ReplacePaletteInSprite()
+{
+    vector<BNSprite::PaletteGroup> paletteGroups;
+    for (PaletteGroup const& group : m_paletteGroups)
+    {
+        BNSprite::PaletteGroup groupCopy;
+        for (Palette const& pal : group)
+        {
+            BNSprite::Palette palCopy;
+            // TODO: 256 color support
+            for (uint32_t i = 0; i < 16; i++)
+            {
+                uint32_t const& rgb = pal[i];
+                uint16_t col = BNSprite::RGBtoGBA(rgb);
+                palCopy.m_colors.push_back(col);
+            }
+            groupCopy.m_palettes.push_back(palCopy);
+        }
+        paletteGroups.push_back(groupCopy);
+    }
+    m_sprite.ReplaceAllPaletteGroups(paletteGroups);
 }
 
 void BNSpriteEditor::on_actionClose_triggered()
@@ -657,8 +672,7 @@ void BNSpriteEditor::on_actionConvert_Sprite_to_be_Compatible_with_SF_triggered(
         return;
     }
 
-    bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
-    if (csmActive)
+    if (IsCustomSpriteMakerActive())
     {
         QMessageBox::critical(this, "Error", "You should not use this while making custom sprites, set this in build option instead.", QMessageBox::Ok);
         return;
@@ -673,6 +687,9 @@ void BNSpriteEditor::on_actionConvert_Sprite_to_be_Compatible_with_SF_triggered(
     {
         return;
     }
+
+    // Need to update palette in m_sprite first
+    ReplacePaletteInSprite();
 
     bool modified = false;
     string errorMsg;
@@ -715,6 +732,8 @@ void BNSpriteEditor::ResetProgram(bool clearSprite)
     {
         on_SubFrame_PB_Play_clicked();
     }
+
+    m_paletteContextMenu->reset();
 
     ResetOthers();
     ResetFrame();
@@ -782,8 +801,10 @@ void BNSpriteEditor::ResetOthers()
 
     ui->Palette_SB_Group->setEnabled(false);
     ui->Palette_SB_Index->setEnabled(false);
-    ui->Palette_PB_New->setEnabled(false);
-    ui->Palette_PB_Del->setEnabled(false);
+    ui->Palette_PB_Up->setEnabled(false);
+    ui->Palette_PB_Down->setEnabled(false);
+    ui->Palette_PB_Import->setEnabled(false);
+    ui->Palette_PB_Export->setEnabled(false);
     ui->Palette_Warning->setHidden(true);
 
     ui->Object_Tabs->setEnabled(false);
@@ -1211,20 +1232,19 @@ void BNSpriteEditor::on_Frame_LW_currentItemChanged(QListWidgetItem *current, QL
     m_frame = m_sprite.GetAnimationFrame(animID, frameID);
 
     // Palette
-    bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
     int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
     ui->Palette_SB_Group->setValue(m_frame.m_paletteGroupID);
     ui->Palette_SB_Group->setEnabled(true);
     ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_SB_Index->setEnabled(true);
-    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
-    ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
+    ui->Palette_PB_Import->setEnabled(!IsCustomSpriteMakerActive());
+    ui->Palette_PB_Export->setEnabled(true);
 
     // Tileset
     ui->Tileset_SB_Index->setMaximum(m_sprite.GetTilesetCount() - 1);
     ui->Tileset_SB_Index->setValue(m_frame.m_tilesetID);
     ui->Tileset_SB_Index->setEnabled(true);
-    ui->Tileset_PB_Import->setEnabled(!csmActive);
+    ui->Tileset_PB_Import->setEnabled(!IsCustomSpriteMakerActive());
     ui->Tileset_PB_Export->setEnabled(true);
     CacheTileset();
 
@@ -2121,14 +2141,13 @@ void BNSpriteEditor::on_Palette_SB_Group_valueChanged(int arg1)
     m_frame.m_paletteGroupID = arg1;
 
     // Force palette index to be 0
-    bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
     int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
     ui->Palette_SB_Index->blockSignals(true);
     ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_SB_Index->setValue(0);
     ui->Palette_SB_Index->blockSignals(false);
-    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
-    ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
+    ui->Palette_PB_Up->setEnabled(false);
+    ui->Palette_PB_Down->setEnabled(maximum != 0 && !IsCustomSpriteMakerActive());
     for (BNSprite::Object& object : m_frame.m_objects)
     {
         object.m_paletteIndex = 0;
@@ -2187,6 +2206,10 @@ void BNSpriteEditor::on_Palette_SB_Index_valueChanged(int arg1)
     if (object.m_paletteIndex == arg1 || !ui->Palette_SB_Index->isEnabled()) return;
     object.m_paletteIndex = arg1;
 
+    int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
+    ui->Palette_PB_Up->setEnabled(object.m_paletteIndex > 0 && !IsCustomSpriteMakerActive());
+    ui->Palette_PB_Down->setEnabled(object.m_paletteIndex < maximum && !IsCustomSpriteMakerActive());
+
     // Only update if index <= 255
     if (arg1 <= 255)
     {
@@ -2223,78 +2246,175 @@ void BNSpriteEditor::on_Palette_SB_Index_valueChanged(int arg1)
     SetPaletteSelected(arg1);
 }
 
-void BNSpriteEditor::on_Palette_PB_New_clicked()
+void BNSpriteEditor::on_Palette_PB_Up_pressed()
 {
-    int group = ui->Palette_SB_Group->value();
     int index = ui->Palette_SB_Index->value();
-    PaletteGroup& paletteGroup = m_paletteGroups[group];
-    paletteGroup.push_back(paletteGroup[index]);
-    ui->Palette_GV->addPalette(paletteGroup[index]);
+    SwapPalette(index, index - 1);
+    ui->Palette_SB_Index->setValue(index - 1);
 
-    bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
-    int maximum = paletteGroup.size() - 1;
-    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
-    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
-    ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
+    // swapping doesn't change current frame palette
+    UpdateAllThumbnails(-1);
 }
 
-void BNSpriteEditor::on_Palette_PB_Del_clicked()
+void BNSpriteEditor::on_Palette_PB_Down_pressed()
 {
-    int group = ui->Palette_SB_Group->value();
     int index = ui->Palette_SB_Index->value();
+    SwapPalette(index, index + 1);
+    ui->Palette_SB_Index->setValue(index + 1);
 
-    QMessageBox::StandardButton resBtn = QMessageBox::Yes;
-    QString message = "Do you wish to delete palette index " + QString::number(index) + "? All frame that uses this palette will be affected.";
-    resBtn = QMessageBox::warning(this, "Delete Palette", message, QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-    if (resBtn == QMessageBox::No)
+    // swapping doesn't change current frame palette
+    UpdateAllThumbnails(-1);
+}
+
+void BNSpriteEditor::on_Palette_PB_Import_pressed()
+{
+    QString path = "";
+    if (!m_path.isEmpty())
     {
+        path = m_path;
+    }
+
+    QString file = QFileDialog::getOpenFileName(this, tr("Import Palette"), path, PALETTE_EXTENSIONS);
+    if (file == Q_NULLPTR) return;
+
+    // Save directory
+    QFileInfo info(file);
+    m_path = info.dir().absolutePath();
+
+    FILE* f;
+    _wfopen_s(&f, file.toStdWString().c_str(), L"rb");
+    if (!f)
+    {
+        QMessageBox::critical(this, "Error", "Unable to open file!");
         return;
     }
 
-    PaletteGroup& paletteGroup = m_paletteGroups[group];
-    if (paletteGroup.size() <= 1) return;
-    paletteGroup.remove(index);
-    ui->Palette_GV->deletePalette(index);
-
-    bool csmActive = m_csm != Q_NULLPTR && m_csm->isVisible();
-    int maximum = paletteGroup.size() - 1;
-    ui->Palette_SB_Index->blockSignals(true);
-    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
-    ui->Palette_SB_Index->blockSignals(false);
-    ui->Palette_PB_New->setEnabled(maximum < 255 && !csmActive);
-    ui->Palette_PB_Del->setEnabled(maximum > 0 && !csmActive);
-
-    // Redraw preview, OAM, tileset
-    int objectID = ui->Object_Tabs->currentIndex();
-    BNSprite::Object const& object = m_frame.m_objects[objectID];
-    int OAMIndex = ui->OAM_TW->indexOfTopLevelItem(ui->OAM_TW->currentItem());
-    for (int i = 0; i < m_previewOAMs.size(); i++)
+    // File size
+    fseek(f, 0, SEEK_END);
+    uint32_t fileSize = ftell(f);
+    if (fileSize % 0x20 != 0)
     {
-        UpdatePreviewOAM(i, object.m_subObjects[i], true);
+        QMessageBox::critical(this, "Error", "Invalid palette file, it must be a multiple of 0x20 bytes!");
+        fclose(f);
+        return;
+    }
 
-        if (i == OAMIndex)
+    if (fileSize > (0x20 * 256))
+    {
+        QMessageBox::critical(this, "Error", "Cannot import more than 256 palettes!");
+        fclose(f);
+        return;
+    }
+
+    fseek(f, 0x00, SEEK_SET);
+    PaletteGroup tempGroup;
+    while((uint32_t)ftell(f) < fileSize)
+    {
+        // TODO: 256 color support?
+        Palette tempPal;
+        for (uint8_t i = 0; i < 16; i++)
         {
-            UpdateOAMThumbnail(object.m_subObjects[i]);
+            uint8_t byte, byte2;
+            fread(&byte, 1, 1, f);
+            fread(&byte2, 1, 1, f);
+            QRgb rgb = BNSprite::GBAtoRGB((byte2 << 8) + byte);
+            tempPal.push_back(rgb);
+        }
+        tempPal.push_back(0); // 16/256: transparency
+        tempGroup.push_back(tempPal);
+    }
+    fclose(f);
+
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Import Palette");
+    msgBox.setIcon(QMessageBox::Question);
+    QString message = "Do you want to append palettes, replace current group or create new group?";
+    message += "\n(WARNING: If the number of palette imported to replace is fewer than what it currently has, palette indices of frames will be clamped!)";
+    msgBox.setText(message);
+    QAbstractButton* pButtonAppend = msgBox.addButton("Append", QMessageBox::YesRole);
+    QAbstractButton* pButtonReplace = msgBox.addButton("Replace", QMessageBox::YesRole);
+    QAbstractButton* pButtonNewGroup = msgBox.addButton("New Group", QMessageBox::YesRole);
+    QAbstractButton* pButtonCancel = msgBox.addButton("Cancel", QMessageBox::NoRole);
+    msgBox.exec();
+
+    int group = ui->Palette_SB_Group->value();
+    PaletteGroup& palGroup = m_paletteGroups[group];
+
+    QAbstractButton* clickedButton = msgBox.clickedButton();
+    if (clickedButton == pButtonCancel)
+    {
+        return;
+    }
+    else if (clickedButton == pButtonNewGroup)
+    {
+        m_paletteGroups.push_back(tempGroup);
+        ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
+    }
+    else // if (clickedButton == pButtonReplace || clickedButton == pButtonAppend)
+    {
+        if (clickedButton == pButtonReplace)
+        {
+            palGroup.clear();
+        }
+        else if (palGroup.size() + tempGroup.size() > 256)
+        {
+            QMessageBox::critical(this, "Error", "Maximum no. of palette is reached (256)!");
+            return;
+        }
+
+        for (Palette const& palette : tempGroup)
+        {
+            palGroup.push_back(palette);
         }
     }
 
-    UpdateDrawTileset();
+    // Only need to update thumbnail if we replace the group
+    if (msgBox.clickedButton() == pButtonReplace)
+    {
+        UpdateAllThumbnails(-1, true);
+    }
 
-    // Update frame/animation/subframe thumbnails
-    int animID = ui->Anim_LW->currentRow();
-    for (int i = 0; i < ui->Frame_LW->count(); i++)
+    // Reload current frame
+    on_Frame_LW_currentItemChanged(ui->Frame_LW->currentItem(), Q_NULLPTR);
+}
+
+void BNSpriteEditor::on_Palette_PB_Export_pressed()
+{
+    QString path = "";
+    if (!m_path.isEmpty())
     {
-        UpdateFrameThumbnail(i);
+        path = m_path;
     }
-    for (int i = 0; i < ui->Anim_LW->count(); i++)
+
+    QString file = QFileDialog::getSaveFileName(this, tr("Export Palette"), path, PALETTE_EXTENSIONS);
+    if (file == Q_NULLPTR) return;
+
+    // Save directory
+    QFileInfo info(file);
+    m_path = info.dir().absolutePath();
+
+    FILE* f;
+    _wfopen_s(&f, file.toStdWString().c_str(), L"wb");
+    if (!f)
     {
-        if (animID == i) continue;
-        UpdateAnimationThumnail(i);
+        QMessageBox::critical(this, "Error", "Unable to open file!");
+        return;
     }
-    for (int i = 0; i < ui->SubFrame_LW->count(); i++)
+
+    int group = ui->Palette_SB_Group->value();
+    PaletteGroup const& palGroup = m_paletteGroups[group];
+    for (Palette const& pal : palGroup)
     {
-        UpdateSubFrameThumbnail(i);
+        // TODO: 256 color support?
+        for (uint8_t i = 0; i < 16; i++)
+        {
+            uint16_t const gbaColor = BNSprite::RGBtoGBA(pal[i]);
+            fwrite(&gbaColor, 2, 1, f);
+        }
     }
+
+    fclose(f);
+    QMessageBox::information(this, "Export Palette", "Palettes of this group is exported!");
 }
 
 void BNSpriteEditor::on_Palette_Color_changed(int paletteIndex, int colorIndex, QRgb color)
@@ -2302,42 +2422,94 @@ void BNSpriteEditor::on_Palette_Color_changed(int paletteIndex, int colorIndex, 
     int group = ui->Palette_SB_Group->value();
     m_paletteGroups[group][paletteIndex][colorIndex] = color;
 
-    // Update everything that is affected by this (jesus christ)
-    // Check current selected frame
-    if (ui->Palette_SB_Index->value() == paletteIndex)
-    {
-        // Redraw preview, OAM, tileset
-        int objectID = ui->Object_Tabs->currentIndex();
-        BNSprite::Object const& object = m_frame.m_objects[objectID];
-        int OAMIndex = ui->OAM_TW->indexOfTopLevelItem(ui->OAM_TW->currentItem());
-        for (int i = 0; i < m_previewOAMs.size(); i++)
-        {
-            UpdatePreviewOAM(i, object.m_subObjects[i], true);
+    UpdateAllThumbnails(paletteIndex);
+}
 
-            if (i == OAMIndex)
-            {
-                UpdateOAMThumbnail(object.m_subObjects[i]);
-            }
-        }
+void BNSpriteEditor::on_PaletteContexMenu_requested(int paletteIndex, int colorIndex, QPoint pos)
+{
+    int group = ui->Palette_SB_Group->value();
+    PaletteGroup const& palGroup = m_paletteGroups[group];
+    if (paletteIndex >= palGroup.size() || colorIndex > 15) return;
 
-        UpdateDrawTileset();
-    }
+    // cannot delete if there's only one palette or using custom sprite maker
+    m_paletteContextMenu->deletePaletteAction->setEnabled(palGroup.size() > 1 && !IsCustomSpriteMakerActive());
 
-    // Update frame/animation thumbnails
-    int animID = ui->Anim_LW->currentRow();
-    for (int i = 0; i < ui->Frame_LW->count(); i++)
+    // cannot insert if maximum is reached
+    bool enableInsert = palGroup.size() - 1 < 255 && !IsCustomSpriteMakerActive() && !m_paletteContextMenu->getPalettecopied().isEmpty();
+    m_paletteContextMenu->insertAboveAction->setEnabled(enableInsert);
+    m_paletteContextMenu->insertBelowAction->setEnabled(enableInsert);
+
+    Palette const& palette = palGroup[paletteIndex];
+    m_paletteContextMenu->setPaletteIndex(paletteIndex);
+    m_paletteContextMenu->setColorIndex(colorIndex);
+    m_paletteContextMenu->setPalettePressed(palette);
+    m_paletteContextMenu->setColorPressed(palette[colorIndex]);
+    m_paletteContextMenu->popup(pos);
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_colorCopied()
+{
+    m_paletteContextMenu->setColorCopied();
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_colorReplaced()
+{
+    int group = ui->Palette_SB_Group->value();
+    int paletteIndex = m_paletteContextMenu->getPaletteIndex();
+    int colorIndex = m_paletteContextMenu->getColorIndex();
+
+    PaletteGroup const& palGroup = m_paletteGroups[group];
+    if (paletteIndex >= palGroup.size() || colorIndex > 15) return;
+
+    QRgb const color = m_paletteContextMenu->getColorcopied();
+    if ((color >> 24) == 0xFF)
     {
-        UpdateFrameThumbnail(i);
+        on_Palette_Color_changed(paletteIndex, colorIndex, color);
+        ui->Palette_GV->replaceColor(paletteIndex, colorIndex, color);
     }
-    for (int i = 0; i < ui->Anim_LW->count(); i++)
-    {
-        if (animID == i) continue;
-        UpdateAnimationThumnail(i);
-    }
-    for (int i = 0; i < ui->SubFrame_LW->count(); i++)
-    {
-        UpdateSubFrameThumbnail(i);
-    }
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_paletteCopied()
+{
+    m_paletteContextMenu->setPaletteCopied();
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_paletteReplaced()
+{
+    int group = ui->Palette_SB_Group->value();
+    int paletteIndex = m_paletteContextMenu->getPaletteIndex();
+
+    Palette& palette = m_paletteGroups[group][paletteIndex];
+    Palette const paletteNew = m_paletteContextMenu->getPalettecopied();
+
+    if (palette.size() != paletteNew.size()) return;
+    palette = paletteNew;
+    ui->Palette_GV->replacePalette(paletteIndex, paletteNew);
+
+    UpdateAllThumbnails(paletteIndex);
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_paletteInsertAbove()
+{
+    int insertAt = m_paletteContextMenu->getPaletteIndex();
+    Palette const palette = m_paletteContextMenu->getPalettecopied();
+    InsertPalette(insertAt, palette);
+
+    // increment index by one
+    ui->Palette_SB_Index->setValue(ui->Palette_SB_Index->value() + 1);
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow()
+{
+    int insertAt = m_paletteContextMenu->getPaletteIndex() + 1;
+    Palette const palette = m_paletteContextMenu->getPalettecopied();
+    InsertPalette(insertAt, palette);
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_paletteDeleted()
+{
+    int paletteIndex = m_paletteContextMenu->getPaletteIndex();
+    DeletePalette(paletteIndex);
 }
 
 //---------------------------------------------------------------------------
@@ -2390,12 +2562,130 @@ void BNSpriteEditor::UpdatePalettePreview()
 }
 
 //---------------------------------------------------------------------------
+// Swap two palettes
+//---------------------------------------------------------------------------
+void BNSpriteEditor::SwapPalette(int id1, int id2)
+{
+    int group = ui->Palette_SB_Group->value();
+
+    PaletteGroup& palGroup = m_paletteGroups[group];
+    qSwap(palGroup[id1], palGroup[id2]);
+
+    ui->Palette_GV->swapPalette(id1, id2);
+}
+
+//---------------------------------------------------------------------------
+// Insert a new palette at
+//---------------------------------------------------------------------------
+void BNSpriteEditor::InsertPalette(int insertAt, const Palette palette)
+{
+    int group = ui->Palette_SB_Group->value();
+    int index = ui->Palette_SB_Index->value();
+
+    PaletteGroup& palGroup = m_paletteGroups[group];
+    if (insertAt < 0 || insertAt > palGroup.size()) return;
+
+    palGroup.insert(insertAt, palette);
+    ui->Palette_GV->addPalette(palette, insertAt);
+
+    int maximum = palGroup.size() - 1;
+    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
+    ui->Palette_PB_Up->setEnabled(index > 0 && !IsCustomSpriteMakerActive());
+    ui->Palette_PB_Down->setEnabled(index < maximum && !IsCustomSpriteMakerActive());
+
+    UpdateAllThumbnails(-1, true);
+}
+
+//---------------------------------------------------------------------------
+// Delete a palette in a group
+//---------------------------------------------------------------------------
+void BNSpriteEditor::DeletePalette(int paletteIndex)
+{
+    int group = ui->Palette_SB_Group->value();
+    int index = ui->Palette_SB_Index->value();
+
+    QMessageBox::StandardButton resBtn = QMessageBox::Yes;
+    QString message = "Do you wish to delete palette index " + QString::number(paletteIndex) + "? All frame that uses this palette will be affected.";
+    resBtn = QMessageBox::warning(this, "Delete Palette", message, QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (resBtn == QMessageBox::No)
+    {
+        return;
+    }
+
+    PaletteGroup& paletteGroup = m_paletteGroups[group];
+    if (paletteGroup.size() <= 1) return;
+    paletteGroup.remove(paletteIndex);
+    ui->Palette_GV->deletePalette(paletteIndex);
+
+    int maximum = paletteGroup.size() - 1;
+    ui->Palette_SB_Index->blockSignals(true);
+    ui->Palette_SB_Index->setMaximum(qMin(maximum, 255)); // note that the frame is not saved
+    ui->Palette_SB_Index->blockSignals(false);
+    ui->Palette_PB_Up->setEnabled(index > 0 && !IsCustomSpriteMakerActive());
+    ui->Palette_PB_Down->setEnabled(index < maximum && !IsCustomSpriteMakerActive());
+
+    // Redraw preview, OAM, tileset
+    UpdateAllThumbnails(-1, true);
+}
+
+//---------------------------------------------------------------------------
+// Palette has been updated, redrawn everything that is affected by this
+//---------------------------------------------------------------------------
+void BNSpriteEditor::UpdateAllThumbnails(int paletteIndex, bool redrawAll)
+{
+    // Check current selected frame
+    if (ui->Palette_SB_Index->value() == paletteIndex || redrawAll)
+    {
+        // Redraw preview, OAM, tileset
+        int objectID = ui->Object_Tabs->currentIndex();
+        BNSprite::Object const& object = m_frame.m_objects[objectID];
+        int OAMIndex = ui->OAM_TW->indexOfTopLevelItem(ui->OAM_TW->currentItem());
+        for (int i = 0; i < m_previewOAMs.size(); i++)
+        {
+            UpdatePreviewOAM(i, object.m_subObjects[i], true);
+
+            if (i == OAMIndex)
+            {
+                UpdateOAMThumbnail(object.m_subObjects[i]);
+            }
+        }
+
+        UpdateDrawTileset();
+    }
+
+    // Update frame/animation thumbnails
+    int animID = ui->Anim_LW->currentRow();
+    for (int i = 0; i < ui->Frame_LW->count(); i++)
+    {
+        UpdateFrameThumbnail(i);
+    }
+    for (int i = 0; i < ui->Anim_LW->count(); i++)
+    {
+        if (animID == i) continue;
+        UpdateAnimationThumnail(i);
+    }
+    for (int i = 0; i < ui->SubFrame_LW->count(); i++)
+    {
+        UpdateSubFrameThumbnail(i);
+    }
+}
+
+//---------------------------------------------------------------------------
 // Object signals
 //---------------------------------------------------------------------------
 void BNSpriteEditor::on_Object_Tabs_currentChanged(int index)
 {
-    BNSprite::Object const& object = m_frame.m_objects[index];
+    BNSprite::Object& object = m_frame.m_objects[index];
+
+    // Clamp the palette index to valid
+    int maximum = ui->Palette_SB_Index->maximum();
+    if (object.m_paletteIndex > maximum)
+    {
+        object.m_paletteIndex = maximum;
+    }
     ui->Palette_SB_Index->setValue(object.m_paletteIndex);
+    ui->Palette_PB_Up->setEnabled(object.m_paletteIndex > 0 && !IsCustomSpriteMakerActive());
+    ui->Palette_PB_Down->setEnabled(object.m_paletteIndex < maximum && !IsCustomSpriteMakerActive());
 
     // Load OAMs
     ResetOAM();

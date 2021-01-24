@@ -559,22 +559,48 @@
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_9">
                <item>
-                <widget class="QPushButton" name="Palette_PB_New">
+                <widget class="QToolButton" name="Palette_PB_Up">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
                  <property name="text">
-                  <string>Duplicate</string>
+                  <string>...</string>
+                 </property>
+                 <property name="arrowType">
+                  <enum>Qt::UpArrow</enum>
                  </property>
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="Palette_PB_Del">
+                <widget class="QToolButton" name="Palette_PB_Down">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
                  <property name="text">
-                  <string>Delete</string>
+                  <string>...</string>
+                 </property>
+                 <property name="arrowType">
+                  <enum>Qt::DownArrow</enum>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="Palette_PB_Import">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="text">
+                  <string>Import</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="Palette_PB_Export">
+                 <property name="enabled">
+                  <bool>false</bool>
+                 </property>
+                 <property name="text">
+                  <string>Export</string>
                  </property>
                 </widget>
                </item>

@@ -25,10 +25,14 @@ public:
     ~PaletteGraphicsView() override;
 
     void setMouseEventEnabled(bool enabled) { m_mouseEventEnabled = enabled; }
-    void addPalette(Palette palette);
+    void addPalette(Palette palette, int insertAt = -1);
     void setPaletteSelected(int index);
     void deletePalette(int index);
     void clear();
+
+    void replaceColor(int paletteIndex, int colorIndex, QRgb color);
+    void replacePalette(int paletteIndex, Palette palette);
+    void swapPalette(int id1, int id2);
 
     void closeInfo();
 
@@ -43,6 +47,7 @@ private:
 
 signals:
     void colorChanged(int paletteIndex, int colorIndex, QRgb color);
+    void paletteContextMenuRequested(int paletteIndex, int colorIndex, QPoint pos);
 
 public slots:
     void updateInfo();
