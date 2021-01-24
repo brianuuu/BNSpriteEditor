@@ -21,7 +21,7 @@
 //-----------------------------------------------------
 BNSprite::BNSprite()
 {
-    m_loaded = false;
+    Clear();
 }
 
 //-----------------------------------------------------
@@ -37,6 +37,7 @@ BNSprite::~BNSprite()
 void BNSprite::Clear()
 {
     m_loaded = false;
+    m_256ColorMode = false;
     m_animations.clear();
     m_tilesets.clear();
     m_paletteGroups.clear();
@@ -810,11 +811,12 @@ bool BNSprite::LoadSF
         palSize = 16;
         tileSize = 0x20;
     }
-    //else if (colDepth == 6)
-    //{
-    //    palSize = 256;
-    //    tileSize = 0x40;
-    //}
+    else if (colDepth == 6)
+    {
+        palSize = 256;
+        tileSize = 0x40;
+        m_256ColorMode = true;
+    }
     else
     {
         _errorMsg = "Unsupported color mode " + to_string(colDepth);
@@ -1046,6 +1048,12 @@ bool BNSprite::SaveBN
     string& _errorMsg
 )
 {
+    if (m_256ColorMode)
+    {
+        _errorMsg = "BN sprite does not support 256 palette colors!";
+        return false;
+    }
+
     // Check if sprite is valid for BN sprite
     for (uint32_t a = 0; a < m_animations.size(); a++)
     {
@@ -1403,7 +1411,7 @@ bool BNSprite::SaveSF
     // Check multiple palette groups
     if (m_paletteGroups.size() > 1)
     {
-        _errorMsg = "SF sprite does not support multiple palette groups";
+        _errorMsg = "SF sprite does not support multiple palette groups, please convert sprite to be compatible with SF first!";
         return false;
     }
 
@@ -1699,6 +1707,12 @@ bool BNSprite::Merge
     string& _errorMsg
 )
 {
+    if (m_256ColorMode)
+    {
+        _errorMsg = "Merging does not support 256 palette colors!";
+        return false;
+    }
+
     if (_other.m_animations.size() + m_animations.size() > 255)
     {
         _errorMsg = "Total no. of animations exceed 255!";
@@ -1956,8 +1970,15 @@ void BNSprite::GetTilesetPixels
 
     for (uint8_t const& byte : m_tilesets[_tilesetID].m_data)
     {
-        _data.push_back(byte & 0xF);
-        _data.push_back((byte & 0xF0) >> 4);
+        if (m_256ColorMode)
+        {
+            _data.push_back(byte);
+        }
+        else
+        {
+            _data.push_back(byte & 0xF);
+            _data.push_back((byte & 0xF0) >> 4);
+        }
     }
 }
 

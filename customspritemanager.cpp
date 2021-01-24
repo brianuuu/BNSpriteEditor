@@ -1106,7 +1106,7 @@ void CustomSpriteManager::UpdatePalettePreview()
     int group = ui->Palette_SB_Group->value();
     for (int i = 0; i < m_paletteGroups[group].size(); i++)
     {
-        ui->Palette_GV->addPalette(m_paletteGroups[group][i]);
+        ui->Palette_GV->addPalette(m_paletteGroups[group][i], false);
     }
 
     // Call valueChanged to filter resources

@@ -25,7 +25,7 @@ public:
     ~PaletteGraphicsView() override;
 
     void setMouseEventEnabled(bool enabled) { m_mouseEventEnabled = enabled; }
-    void addPalette(Palette palette, int insertAt = -1);
+    void addPalette(Palette palette, bool is256Color, int insertAt = -1);
     void setPaletteSelected(int index);
     void deletePalette(int index);
     void clear();

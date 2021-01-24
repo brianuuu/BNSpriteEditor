@@ -45,33 +45,39 @@ PaletteGraphicsView::~PaletteGraphicsView()
     clear();
 }
 
-void PaletteGraphicsView::addPalette(Palette palette, int insertAt)
+void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int insertAt)
 {
-    // Make sure size is 16
-    while (palette.size() > 16)
+    // Only allow one 256 color is display at a time
+    if (is256Color && !m_images.isEmpty())
+    {
+        return;
+    }
+
+    // Make sure size is 16/256
+    while (palette.size() > (is256Color ? 256 : 16))
     {
         palette.pop_back();
     }
-    while (palette.size() < 16)
+    while (palette.size() < (is256Color ? 256 : 16))
     {
         palette.push_back(0xFF000000);
     }
-    palette.push_back(c_unselected);    // 16
+    palette.push_back(c_unselected);    // 16/256
 
-    QImage* image = new QImage(c_width, c_size, QImage::Format_Indexed8);
+    QImage* image = new QImage(c_width, is256Color ? c_size * c_size : c_size, QImage::Format_Indexed8);
     image->setColorTable(palette);
 
     for (int y = 0; y < image->height(); y++)
     {
         for (int x = 0; x < image->width(); x++)
         {
-            if (x == 0 || x % (c_size - 1) == 0 || y == 0 || y == image->height() - 1)
+            if (x == 0 || x % (c_size - 1) == 0 || y == 0 || y % c_size == c_size - 1)
             {
                 image->setPixel(x, y, palette.size() - 1);
             }
             else
             {
-                image->setPixel(x, y, x / (c_size - 1));
+                image->setPixel(x, y, (y / c_size) * 16 + (x / (c_size - 1)));
             }
         }
     }
@@ -103,7 +109,7 @@ void PaletteGraphicsView::addPalette(Palette palette, int insertAt)
         }
     }
 
-    m_graphicsScene->setSceneRect(0, 0, c_width, m_images.size() * 16);
+    m_graphicsScene->setSceneRect(0, 0, c_width, m_images.size() * (is256Color ? c_size * c_size : c_size));
 }
 
 void PaletteGraphicsView::setPaletteSelected(int index)
@@ -201,6 +207,8 @@ void PaletteGraphicsView::replaceColor(int paletteIndex, int colorIndex, QRgb co
 void PaletteGraphicsView::replacePalette(int paletteIndex, Palette palette)
 {
     if (paletteIndex >= m_images.size()) return;
+
+    // TODO: 256 color support
 
     // Make sure size is 16
     while (palette.size() > 16)

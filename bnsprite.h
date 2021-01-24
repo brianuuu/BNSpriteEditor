@@ -114,6 +114,7 @@ public:
     ~BNSprite();
 
     bool IsLoaded() { return m_loaded; }
+    bool Is256Color() { return m_256ColorMode; }
     void Clear();
 
     // Load & Save
@@ -135,7 +136,7 @@ public:
     Frame GetAnimationFrame(int _animID, int _frameID);
     void GetAnimationFrames(int _animID, vector<Frame>& _frames);
     int GetTilesetCount() { return m_tilesets.size(); }
-    int GetTilesetPixelCount(int _tilesetID) { return m_tilesets[_tilesetID].m_data.size() * 2; }
+    int GetTilesetPixelCount(int _tilesetID) { return m_tilesets[_tilesetID].m_data.size() * (m_256ColorMode ? 1 : 2); }
     void GetTilesetPixels(int _tilesetID, vector<uint8_t>& _data);
     void GetAllPaletteGroups(vector<PaletteGroup>& _paletteGroups);
     void ReplaceAllPaletteGroups(vector<PaletteGroup> const& _paletteGroups);
@@ -181,6 +182,7 @@ private:
 
 private:
     bool m_loaded;
+    bool m_256ColorMode;
 
     vector<Animation> m_animations;
     vector<Tileset> m_tilesets;

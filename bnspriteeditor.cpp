@@ -2439,6 +2439,9 @@ void BNSpriteEditor::on_PaletteContexMenu_requested(int paletteIndex, int colorI
     m_paletteContextMenu->insertAboveAction->setEnabled(enableInsert);
     m_paletteContextMenu->insertBelowAction->setEnabled(enableInsert);
 
+    // cannot copy palette for 256 color
+    m_paletteContextMenu->copyPaletteAction->setEnabled(!m_sprite.Is256Color());
+
     Palette const& palette = palGroup[paletteIndex];
     m_paletteContextMenu->setPaletteIndex(paletteIndex);
     m_paletteContextMenu->setColorIndex(colorIndex);
@@ -2554,7 +2557,7 @@ void BNSpriteEditor::UpdatePalettePreview()
     int group = ui->Palette_SB_Group->value();
     for (int i = 0; i < m_paletteGroups[group].size(); i++)
     {
-        ui->Palette_GV->addPalette(m_paletteGroups[group][i]);
+        ui->Palette_GV->addPalette(m_paletteGroups[group][i], m_sprite.Is256Color());
     }
 
     int index = ui->Palette_SB_Index->value();
@@ -2586,7 +2589,7 @@ void BNSpriteEditor::InsertPalette(int insertAt, const Palette palette)
     if (insertAt < 0 || insertAt > palGroup.size()) return;
 
     palGroup.insert(insertAt, palette);
-    ui->Palette_GV->addPalette(palette, insertAt);
+    ui->Palette_GV->addPalette(palette, false, insertAt);
 
     int maximum = palGroup.size() - 1;
     ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
@@ -2822,7 +2825,7 @@ void BNSpriteEditor::on_OAM_TW_currentItemChanged(QTreeWidgetItem *current, QTre
     BNSprite::Object const& object = m_frame.m_objects[objectID];
     BNSprite::SubObject const& subObject = object.m_subObjects[index];
 
-    ui->OAM_SB_Tile->setMaximum(m_sprite.GetTilesetPixelCount(ui->Tileset_SB_Index->value()) / 64 - 1);
+    ui->OAM_SB_Tile->setMaximum(m_tilesetData.size() / 64 - 1);
     ui->OAM_SB_Tile->setValue(subObject.m_startTile);
     ui->OAM_SB_Tile->setEnabled(true);
     ui->OAM_CB_Size->setCurrentText(QString::number(subObject.m_sizeX) + "x" + QString::number(subObject.m_sizeY));
