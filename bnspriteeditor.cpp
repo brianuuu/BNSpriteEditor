@@ -321,8 +321,7 @@ void BNSpriteEditor::ReplacePaletteInSprite()
         for (Palette const& pal : group)
         {
             BNSprite::Palette palCopy;
-            // TODO: 256 color support
-            for (uint32_t i = 0; i < 16; i++)
+            for (uint32_t i = 0; i < pal.size(); i++)
             {
                 uint32_t const& rgb = pal[i];
                 uint16_t col = BNSprite::RGBtoGBA(rgb);
@@ -505,13 +504,7 @@ void BNSpriteEditor::on_actionExport_Sprite_as_Single_PNG_triggered()
     }
 
     QImage output(imageSize, QImage::Format_RGBA8888);
-    for (int y = 0; y < output.height(); y++)
-    {
-        for (int x = 0; x < output.width(); x++)
-        {
-            output.setPixel(x, y, 0);
-        }
-    }
+    output.fill(0);
 
     QPainter painter(&output);
 
@@ -955,14 +948,7 @@ void BNSpriteEditor::UpdateFrameImage(const BNSprite::Frame &_frame, QImage *_im
     int index = qMin((int)object.m_paletteIndex, paletteGroup.size() - 1);
     Palette const& palette = paletteGroup[index];
     _image->setColorTable(palette);
-
-    for (int y = 0; y < _image->height(); y++)
-    {
-        for (int x = 0; x < _image->width(); x++)
-        {
-            _image->setPixel(x, y, palette.size() - 1);
-        }
-    }
+    _image->fill(0);
 
     // Draw image
     vector<uint8_t> data;
@@ -1711,16 +1697,10 @@ void BNSpriteEditor::UpdateDrawTileset()
     int group = qMin(ui->Palette_SB_Group->value(), m_paletteGroups.size() - 1);
     PaletteGroup const& paletteGroup = m_paletteGroups[group];
     int index = qMin(ui->Palette_SB_Index->value(), paletteGroup.size() - 1);
-    Palette const& palette = paletteGroup[index];
+    Palette palette = paletteGroup[index];
+    palette[0] |= 0xFF000000; // undo transparency on first color
     m_tilesetImage->setColorTable(palette);
-
-    for (int y = 0; y < m_tilesetImage->height(); y++)
-    {
-        for (int x = 0; x < m_tilesetImage->width(); x++)
-        {
-            m_tilesetImage->setPixel(x, y, palette.size() - 1);
-        }
-    }
+    m_tilesetImage->fill(0);
 
     BNSprite::SubObject dummyOAM;
     dummyOAM.m_sizeX = tileXCount * 8;
@@ -2320,7 +2300,7 @@ void BNSpriteEditor::on_Palette_PB_Import_pressed()
             QRgb rgb = BNSprite::GBAtoRGB((byte2 << 8) + byte);
             tempPal.push_back(rgb);
         }
-        tempPal.push_back(0); // 16/256: transparency
+        tempPal[0] &= 0x00FFFFFF; // set first palette to alpha 0 for transparency
         tempGroup.push_back(tempPal);
     }
     fclose(f);
@@ -2420,7 +2400,9 @@ void BNSpriteEditor::on_Palette_PB_Export_pressed()
 void BNSpriteEditor::on_Palette_Color_changed(int paletteIndex, int colorIndex, QRgb color)
 {
     int group = ui->Palette_SB_Group->value();
-    m_paletteGroups[group][paletteIndex][colorIndex] = color;
+    Palette& palette = m_paletteGroups[group][paletteIndex];
+    palette[colorIndex] = color;
+    palette[0] &= 0x00FFFFFF; // transparency for first color
 
     UpdateAllThumbnails(paletteIndex);
 }
@@ -2533,7 +2515,7 @@ void BNSpriteEditor::AddPaletteGroupFromSprite(const BNSprite::PaletteGroup &pal
             uint32_t rgb = BNSprite::GBAtoRGB(col);
             palCopy.push_back(rgb);
         }
-        palCopy.push_back(0);   // 16/256: transparency
+        palCopy[0] &= 0x00FFFFFF; // set first palette to alpha 0 for transparency
         groupCopy.push_back(palCopy);
     }
     m_paletteGroups.push_back(groupCopy);
@@ -3228,16 +3210,10 @@ void BNSpriteEditor::UpdateOAMThumbnail(const BNSprite::SubObject &_subObject)
     int group = qMin(ui->Palette_SB_Group->value(), m_paletteGroups.size() - 1);
     PaletteGroup const& paletteGroup = m_paletteGroups[group];
     int index = qMin(ui->Palette_SB_Index->value(), paletteGroup.size() - 1);
-    Palette const& palette = paletteGroup[index];
+    Palette palette = paletteGroup[index];
+    palette[0] |= 0xFF000000; // undo transparency on first color
     m_oamImage->setColorTable(palette);
-
-    for (int y = 0; y < m_oamImage->height(); y++)
-    {
-        for (int x = 0; x < m_oamImage->width(); x++)
-        {
-            m_oamImage->setPixel(x, y, palette.size() - 1);
-        }
-    }
+    m_oamImage->fill(0);
 
     DrawOAMInImage(_subObject, m_oamImage, _subObject.m_posX, _subObject.m_posY, m_tilesetData, true);
 
@@ -3261,13 +3237,7 @@ void BNSpriteEditor::on_Preview_BG_currentTextChanged(const QString &arg1)
         QPalette pal = ui->Preview_Color->palette();
         QColor color = pal.color(QPalette::Base);
         QImage image = QImage(256, 256,QImage::Format_RGB888);
-        for (int y = 0; y < image.height(); y++)
-        {
-            for (int x = 0; x < image.width(); x++)
-            {
-                image.setPixel(x, y, color.rgb());
-            }
-        }
+        image.fill(color.rgb());
 
         m_previewBG->setPixmap(QPixmap::fromImage(image));
         ui->Preview_Color->setHidden(false);
@@ -3363,13 +3333,8 @@ void BNSpriteEditor::DrawPreviewOAM(QGraphicsPixmapItem *_graphicsItem, const BN
     int index = qMin(ui->Palette_SB_Index->value(), paletteGroup.size() - 1);
     Palette const& palette = paletteGroup[index];
     image.setColorTable(palette);
-    for (int y = 0; y < image.height(); y++)
-    {
-        for (int x = 0; x < image.width(); x++)
-        {
-            image.setPixel(x, y, palette.size() - 1);
-        }
-    }
+    image.fill(0);
+
     DrawOAMInImage(_subObject, &image, _subObject.m_posX, _subObject.m_posY, m_tilesetData, false);
     _graphicsItem->setPixmap(QPixmap::fromImage(image));
 }
@@ -3689,7 +3654,7 @@ void BNSpriteEditor::on_CSM_BuildSprite_pressed(int tilesetCount)
         for (Palette& palette : group)
         {
             // Add transparency back
-            palette.push_back(0);
+            palette[0] &= 0x00FFFFFF;
         }
     }
     ui->Palette_SB_Group->setValue(0);

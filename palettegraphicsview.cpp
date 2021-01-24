@@ -53,16 +53,9 @@ void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int inser
         return;
     }
 
-    // Make sure size is 16/256
-    while (palette.size() > (is256Color ? 256 : 16))
-    {
-        palette.pop_back();
-    }
-    while (palette.size() < (is256Color ? 256 : 16))
-    {
-        palette.push_back(0xFF000000);
-    }
-    palette.push_back(c_unselected);    // 16/256
+    Q_ASSERT(palette.size() == 16 || palette.size() == 256);
+    palette.push_back(c_unselected); // 16/256
+    palette[0] |= 0xFF000000; // undo transparency on first color
 
     QImage* image = new QImage(c_width, is256Color ? c_size * c_size : c_size, QImage::Format_Indexed8);
     image->setColorTable(palette);
@@ -220,6 +213,7 @@ void PaletteGraphicsView::replacePalette(int paletteIndex, Palette palette)
         palette.push_back(0xFF000000);
     }
     palette.push_back(c_unselected);    // 16
+    palette[0] |= 0xFF000000; // undo transparency on first color
 
     QImage* image = m_images[paletteIndex];
     image->setColorTable(palette);
@@ -279,7 +273,7 @@ void PaletteGraphicsView::mousePressEvent(QMouseEvent *event)
                 if (newColor.isValid())
                 {
                     replaceColor(paletteIndex, colorIndex, newColor.rgb());
-                    emit colorChanged(paletteIndex, colorIndex, color);
+                    emit colorChanged(paletteIndex, colorIndex, newColor.rgb());
                 }
             }
             else if (event->button() == Qt::RightButton)
