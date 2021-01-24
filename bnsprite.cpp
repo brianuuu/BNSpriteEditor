@@ -652,7 +652,7 @@ bool BNSprite::LoadSF
     uint32_t palsHdrOffs = ReadInt(f);
     uint32_t animHdrOffs = ReadInt(f);
     uint32_t sprsHdrOffs = ReadInt(f);
-    uint32_t tnumShift   = ReadInt(f);
+    uint32_t startTileShift = ReadInt(f); // starting tile shift, used by game
     if (tsetHdrOffs > fileSize)
     {
         _errorMsg = "Invalid offset for tilesets segment";
@@ -676,6 +676,76 @@ bool BNSprite::LoadSF
         _errorMsg = "Invalid offset for sprites segment";
         fclose(f);
         return false;
+    }
+
+    // Read palettes header
+    std::cout << "Reading palettes header..." << endl;
+    fseek(f, palsHdrOffs, SEEK_SET);
+    if (fileSize - ftell(f) < 0x4)
+    {
+        _errorMsg = "Incomplete palettes header";
+        fclose(f);
+        return false;
+    }
+    PaletteGroup palGrp;
+    m_paletteGroups.push_back(palGrp);
+    uint16_t colDepth = ReadShort(f);
+    uint16_t palCountMax = ReadShort(f);
+    uint16_t palSize = 0;
+    uint32_t tileSize = 0;
+    uint8_t tnumShift = 0;
+    if (colDepth == 5)
+    {
+        palSize = 16;
+        tileSize = 0x20;
+        tnumShift = 1;
+        m_256ColorMode = false;
+    }
+    else if (colDepth == 6)
+    {
+        palSize = 256;
+        tileSize = 0x40;
+        tnumShift = 0;
+        m_256ColorMode = true;
+    }
+    else
+    {
+        _errorMsg = "Unsupported color mode " + to_string(colDepth);
+        return false;
+    }
+
+    // Figure out the end of the palettes block (probably animations...)
+    long blockEnd = fileSize;
+    if (tsetHdrOffs > palsHdrOffs && (long)tsetHdrOffs < blockEnd)
+    {
+        blockEnd = tsetHdrOffs;
+    }
+    if (animHdrOffs > palsHdrOffs && (long)animHdrOffs < blockEnd)
+    {
+        blockEnd = animHdrOffs;
+    }
+    if (sprsHdrOffs > palsHdrOffs && (long)sprsHdrOffs < blockEnd)
+    {
+        blockEnd = sprsHdrOffs;
+    }
+
+    // Read palettes
+    std::cout << "Reading palettes..." << endl;
+    for (size_t i = 0; ftell(f) < blockEnd; i++)
+    {
+        if (fileSize - ftell(f) < palSize * 0x2)
+        {
+            _errorMsg = "Palette " + to_string(i) + " ended prematurely";
+            fclose(f);
+            return false;
+        }
+
+        Palette pal;
+        for (size_t j = 0; j < palSize; j++)
+        {
+            pal.m_colors.push_back(ReadShort(f));
+        }
+        m_paletteGroups[0].m_palettes.push_back(pal);
     }
 
     // Read sprites header
@@ -789,72 +859,6 @@ bool BNSprite::LoadSF
 
         sprites.push_back(sprite);
         spriteUsed.push_back(false);
-    }
-
-    // Read palettes header
-    std::cout << "Reading palettes header..." << endl;
-    fseek(f, palsHdrOffs, SEEK_SET);
-    if (fileSize - ftell(f) < 0x4)
-    {
-        _errorMsg = "Incomplete palettes header";
-        fclose(f);
-        return false;
-    }
-    PaletteGroup palGrp;
-    m_paletteGroups.push_back(palGrp);
-    uint16_t colDepth = ReadShort(f);
-    uint16_t palCountMax = ReadShort(f);
-    uint16_t palSize = 0;
-    uint32_t tileSize = 0;
-    if (colDepth == 5)
-    {
-        palSize = 16;
-        tileSize = 0x20;
-    }
-    else if (colDepth == 6)
-    {
-        palSize = 256;
-        tileSize = 0x40;
-        m_256ColorMode = true;
-    }
-    else
-    {
-        _errorMsg = "Unsupported color mode " + to_string(colDepth);
-        return false;
-    }
-
-    // Figure out the end of the palettes block (probably animations...)
-    long blockEnd = fileSize;
-    if (tsetHdrOffs > palsHdrOffs && (long)tsetHdrOffs < blockEnd)
-    {
-        blockEnd = tsetHdrOffs;
-    }
-    if (animHdrOffs > palsHdrOffs && (long)animHdrOffs < blockEnd)
-    {
-        blockEnd = animHdrOffs;
-    }
-    if (sprsHdrOffs > palsHdrOffs && (long)sprsHdrOffs < blockEnd)
-    {
-        blockEnd = sprsHdrOffs;
-    }
-
-    // Read palettes
-    std::cout << "Reading palettes..." << endl;
-    for (size_t i = 0; ftell(f) < blockEnd; i++)
-    {
-        if (fileSize - ftell(f) < palSize * 0x2)
-        {
-            _errorMsg = "Palette " + to_string(i) + " ended prematurely";
-            fclose(f);
-            return false;
-        }
-
-        Palette pal;
-        for (size_t j = 0; j < palSize; j++)
-        {
-            pal.m_colors.push_back(ReadShort(f));
-        }
-        m_paletteGroups[0].m_palettes.push_back(pal);
     }
 
     // Read tilesets header
@@ -1427,6 +1431,7 @@ bool BNSprite::SaveSF
     tsetEntries.reserve(m_tilesets.size());
     size_t tsetSizeMax = 0;
     size_t tsetSizeTotal = 0;
+    size_t tileSize = m_256ColorMode ? 0x40 : 0x20;
     for (size_t i = 0; i < m_animations.size(); i++)
     {
         Animation const& anim = m_animations[i];
@@ -1451,12 +1456,25 @@ bool BNSprite::SaveSF
                           + "SF sprite does not support multiple object lists";
                 return false;
             }
+            // Check for odd tiles
+            if (!m_256ColorMode)
+            {
+                for (SubObject subObj : frame.m_objects[0].m_subObjects)
+                {
+                    if (subObj.m_startTile & 1)
+                    {
+                        _errorMsg = "Animation " + to_string(i) + " frame " + to_string(j) + ": "
+                                  + "SF sprite does not support odd tile number in 16-color mode";
+                        return false;
+                    }
+                }
+            }
 
             // New tileset to be added
             if (tsetIdxes[frame.m_tilesetID] == -1)
             {
                 Tileset tset = m_tilesets[frame.m_tilesetID];
-                size_t tsetSize = tset.m_data.size() / 0x20;
+                size_t tsetSize = tset.m_data.size() / tileSize;
 
                 // Add tileset
                 tsetIdxes[frame.m_tilesetID] = (int)tsets.size();
@@ -1578,8 +1596,8 @@ bool BNSprite::SaveSF
 
     // Write palettes header
     uint32_t palsHdrOffs = ftell(f);
-    WriteShort(f, 0x5); // color depth
-    WriteShort(f, 0x10); // palette size
+    WriteShort(f, m_256ColorMode ? 0x6 : 0x5); // color mode
+    WriteShort(f, m_paletteGroups[0].m_palettes.size()); // palette count
 
     // Write palettes
     for (Palette const& pal : m_paletteGroups[0].m_palettes)
@@ -1646,6 +1664,7 @@ bool BNSprite::SaveSF
     }
 
     // Write sprites
+    uint8_t tnumShift = m_256ColorMode ? 0 : 1;
     for (Frame const& sprite : sprites)
     {
         vector<SubObject> const& subObjs = sprite.m_objects[0].m_subObjects;
@@ -1674,14 +1693,14 @@ bool BNSprite::SaveSF
 
             bool last = i == subObjs.size() - 1;
 
-            WriteByte(f, subObj.m_startTile >> 0x1);
+            WriteByte(f, subObj.m_startTile >> tnumShift);
             WriteByte(f, subObj.m_posX);
             WriteByte(f, subObj.m_posY);
             WriteByte(f, size);
             WriteByte(f, shape);
             WriteByte(f, flip);
             WriteByte(f, last);
-            WriteByte(f, subObj.m_startTile >> 0x9);
+            WriteByte(f, subObj.m_startTile >> (8 + tnumShift));
         }
     }
     AlignFourBytes(f);
@@ -1692,7 +1711,7 @@ bool BNSprite::SaveSF
     WriteInt(f, palsHdrOffs);
     WriteInt(f, animHdrOffs);
     WriteInt(f, sprsHdrOffs);
-    WriteInt(f, 1); // tile number shift
+    WriteInt(f, 1); // starting tile number shift, used by game
 
     fclose(f);
     return true;
