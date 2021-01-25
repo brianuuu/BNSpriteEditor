@@ -17,7 +17,7 @@ public:
     explicit PaletteInfoWidget(QWidget *parent = nullptr);
     ~PaletteInfoWidget();
 
-    void setColor(QColor color, int index);
+    void setColor(QColor color, int paletteIndex, int colorIndex);
 
 private:
     Ui::PaletteInfoWidget *ui;

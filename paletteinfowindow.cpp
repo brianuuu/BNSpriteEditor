@@ -14,7 +14,7 @@ PaletteInfoWindow::~PaletteInfoWindow()
     delete ui;
 }
 
-void PaletteInfoWindow::setColor(QColor color, int index)
+void PaletteInfoWindow::setColor(QColor color, int paletteIndex, int colorIndex)
 {
-    ui->PaletteWidget->setColor(color, index);
+    ui->PaletteWidget->setColor(color, paletteIndex, colorIndex);
 }

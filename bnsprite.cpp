@@ -1726,9 +1726,9 @@ bool BNSprite::Merge
     string& _errorMsg
 )
 {
-    if (m_256ColorMode)
+    if (m_256ColorMode != _other.m_256ColorMode)
     {
-        _errorMsg = "Merging does not support 256 palette colors!";
+        _errorMsg = "Cannot merge 16 color mode sprite with 256 color mode sprite!";
         return false;
     }
 
@@ -1738,6 +1738,15 @@ bool BNSprite::Merge
         return false;
     }
 
+    if (m_256ColorMode)
+    {
+        if (m_paletteGroups[0].m_palettes.size() + _other.m_paletteGroups[0].m_palettes.size() > 256)
+        {
+            _errorMsg = "Total no. of palette exceed 256!";
+            return false;
+        }
+    }
+
     // Merge tileset
     int const tilesetIDStart = m_tilesets.size();
     for (Tileset const& tileset : _other.m_tilesets)
@@ -1745,20 +1754,42 @@ bool BNSprite::Merge
         m_tilesets.push_back(tileset);
     }
 
-    // Merge palette groups
-    int const paletteIDStart = m_paletteGroups.size();
-    for (PaletteGroup const& group : _other.m_paletteGroups)
+    int const paletteGroupIDStart = m_paletteGroups.size();
+    int const paletteIDStart = m_paletteGroups[0].m_palettes.size();
+    if (m_256ColorMode)
     {
-        m_paletteGroups.push_back(group);
+        // 256 color merge to single group
+        for (Palette const& pal : _other.m_paletteGroups[0].m_palettes)
+        {
+            m_paletteGroups[0].m_palettes.push_back(pal);
+        }
+    }
+    else
+    {
+        // 16 color append new groups
+        for (PaletteGroup const& group : _other.m_paletteGroups)
+        {
+            m_paletteGroups.push_back(group);
+        }
     }
 
-    // Merge animations, fix tileset and palette ID
+    // Merge animations, fix tileset ID
     for (Animation anim : _other.m_animations)
     {
         for (Frame& frame : anim.m_frames)
         {
             frame.m_tilesetID += tilesetIDStart;
-            frame.m_paletteGroupID += paletteIDStart;
+
+            if (m_256ColorMode)
+            {
+                // 256 color fix palette ID
+                frame.m_objects[0].m_paletteIndex += paletteIDStart;
+            }
+            else
+            {
+                // 16 color fix palette group ID
+                frame.m_paletteGroupID += paletteGroupIDStart;
+            }
         }
         m_animations.push_back(anim);
     }
@@ -2264,9 +2295,11 @@ bool BNSprite::ImportTileset
         return false;
     }
 
-    if (fileSize % 0x20 != 0)
+    if (fileSize % (m_256ColorMode ? 0x40 : 0x20) != 0)
     {
-        _errorMsg = "Invalid tileset file, size must be multiple of 0x20 bytes!";
+        _errorMsg = "Invalid tileset file, size must be multiple of ";
+        _errorMsg += m_256ColorMode ? "0x40" : "0x20";
+        _errorMsg += " bytes!";
         fclose(f);
         return false;
     }

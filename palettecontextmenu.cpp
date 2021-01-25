@@ -39,12 +39,14 @@ void PaletteContextMenu::reset()
 
 void PaletteContextMenu::setColorCopied()
 {
+    // TODO: Copy to clipboard
     m_colorCopied = m_colorPressed;
     replaceColorAction->setEnabled((m_colorCopied >> 24) == 0xFF);
 }
 
 void PaletteContextMenu::setPaletteCopied()
 {
+    // TODO: Copy to clipboard
     m_paletteCopied = m_palettePressed;
 
     bool enabled = m_paletteCopied.size() > 0;

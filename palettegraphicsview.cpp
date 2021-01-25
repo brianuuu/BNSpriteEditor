@@ -11,22 +11,9 @@ PaletteGraphicsView::PaletteGraphicsView(QWidget *parent) : QGraphicsView(parent
     QBrush brush(QColor(240,240,240));
     this->setBackgroundBrush(brush);
 
-    QImage image = QImage((c_size - 1) * 16 + 1, c_size, QImage::Format_RGBA8888);
-    for (int y = 0; y < image.height(); y++)
-    {
-        for (int x = 0; x < image.width(); x++)
-        {
-            if (x <= 1 || x >= image.width() - 2 || y <= 1 || y >= image.height() - 2)
-            {
-                image.setPixel(x, y, qRgb(255, 0, 0));
-            }
-            else
-            {
-                image.setPixel(x, y, 0);
-            }
-        }
-    }
-    m_highlight = m_graphicsScene->addPixmap(QPixmap::fromImage(image));
+    m_is256ColorMode = false;
+    m_highlight = Q_NULLPTR;
+    setHighlightImage();
     m_highlight->setZValue(1000);
     m_highlight->setVisible(false);
 
@@ -47,17 +34,17 @@ PaletteGraphicsView::~PaletteGraphicsView()
 
 void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int insertAt)
 {
-    // Only allow one 256 color is display at a time
-    if (is256Color && !m_images.isEmpty())
+    if (m_is256ColorMode != is256Color)
     {
-        return;
+        m_is256ColorMode = is256Color;
+        setHighlightImage();
     }
 
     Q_ASSERT(palette.size() == 16 || palette.size() == 256);
     palette.push_back(c_unselected); // 16/256
     palette[0] |= 0xFF000000; // undo transparency on first color
 
-    QImage* image = new QImage(c_width, is256Color ? c_size * c_size : c_size, QImage::Format_Indexed8);
+    QImage* image = new QImage(c_width, m_is256ColorMode ? c_size * c_size : c_size, QImage::Format_Indexed8);
     image->setColorTable(palette);
 
     for (int y = 0; y < image->height(); y++)
@@ -87,7 +74,16 @@ void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int inser
     if (insertAt == -1 || insertAt > m_pixmapItems.size())
     {
         m_pixmapItems.push_back(item);
-        item->setPos(0, (m_images.size() - 1) * c_size);
+        if (m_is256ColorMode && m_images.size() > 1)
+        {
+            // Only allow one 256 color is display at a time
+            item->setPos(0, 0);
+            item->setVisible(false);
+        }
+        else
+        {
+            item->setPos(0, (m_images.size() - 1) * c_size);
+        }
     }
     else
     {
@@ -102,7 +98,7 @@ void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int inser
         }
     }
 
-    m_graphicsScene->setSceneRect(0, 0, c_width, m_images.size() * (is256Color ? c_size * c_size : c_size));
+    m_graphicsScene->setSceneRect(0, 0, c_width, m_is256ColorMode ? c_size * c_size : m_images.size() * c_size);
 }
 
 void PaletteGraphicsView::setPaletteSelected(int index)
@@ -113,21 +109,33 @@ void PaletteGraphicsView::setPaletteSelected(int index)
     {
         m_index = index;
         m_highlight->setVisible(true);
-        m_highlight->setPos(0, index * c_size);
 
-        // Scroll to palette if it is off-screen
-        QScrollBar* vScrollBar = this->verticalScrollBar();
-        int height = this->size().height() - 2;
-        int yScroll = vScrollBar->value();
-        int selectedTopY = index * 16;
-        int selectedBaseY = (index + 1) * 16;
-        if (selectedBaseY > height + yScroll)
+        if (m_is256ColorMode)
         {
-            vScrollBar->setValue(selectedBaseY - height);
+            // Display the current 256 color
+            for (int i = 0; i < m_pixmapItems.size(); i++)
+            {
+                m_pixmapItems[i]->setVisible(i == index);
+            }
         }
-        else if (selectedTopY < yScroll)
+        else
         {
-            vScrollBar->setValue(selectedTopY);
+            m_highlight->setPos(0, index * c_size);
+
+            // Scroll to palette if it is off-screen
+            QScrollBar* vScrollBar = this->verticalScrollBar();
+            int height = this->size().height() - 2;
+            int yScroll = vScrollBar->value();
+            int selectedTopY = index * 16;
+            int selectedBaseY = (index + 1) * 16;
+            if (selectedBaseY > height + yScroll)
+            {
+                vScrollBar->setValue(selectedBaseY - height);
+            }
+            else if (selectedTopY < yScroll)
+            {
+                vScrollBar->setValue(selectedTopY);
+            }
         }
     }
 }
@@ -192,14 +200,15 @@ void PaletteGraphicsView::replaceColor(int paletteIndex, int colorIndex, QRgb co
     // Update color (covert it back and forth to round for GBA color)
     color = BNSprite::ClampRGB(color);
     palette[colorIndex] = color;
-
     image->setColorTable(palette);
+
     m_pixmapItems[paletteIndex]->setPixmap(QPixmap::fromImage(*image));
 }
 
 void PaletteGraphicsView::replacePalette(int paletteIndex, Palette palette)
 {
     if (paletteIndex >= m_images.size()) return;
+    Q_ASSERT(palette.size() == 16 || palette.size() == 256);
 
     // TODO: 256 color support
 
@@ -243,6 +252,34 @@ QPoint PaletteGraphicsView::getPixelPos(QPoint pos)
     return pos + QPoint(this->horizontalScrollBar()->value(), this->verticalScrollBar()->value());
 }
 
+void PaletteGraphicsView::setHighlightImage()
+{
+    QImage image = QImage((c_size - 1) * 16 + 1, m_is256ColorMode ? c_size * 16 : c_size, QImage::Format_RGBA8888);
+    for (int y = 0; y < image.height(); y++)
+    {
+        for (int x = 0; x < image.width(); x++)
+        {
+            if (x <= 1 || x >= image.width() - 2 || y <= 1 || y >= image.height() - 2)
+            {
+                image.setPixel(x, y, qRgb(255, 0, 0));
+            }
+            else
+            {
+                image.setPixel(x, y, 0);
+            }
+        }
+    }
+
+    if (m_highlight)
+    {
+        m_highlight->setPixmap(QPixmap::fromImage(image));
+    }
+    else
+    {
+        m_highlight = m_graphicsScene->addPixmap(QPixmap::fromImage(image));
+    }
+}
+
 void PaletteGraphicsView::enterEvent(QEvent *event)
 {
     m_timer->start(10);
@@ -259,10 +296,25 @@ void PaletteGraphicsView::mousePressEvent(QMouseEvent *event)
     if (m_mouseEventEnabled)
     {
         QPoint pos = getPixelPos(m_mousePos);
-        if (pos.x() != 0 && pos.x() <= (c_size - 1) * 16 && pos.y() < m_images.size() * c_size)
+        if (pos.x() != 0 && pos.x() <= (c_size - 1) * 16)
         {
-            int paletteIndex = pos.y() / c_size;
-            int colorIndex = (pos.x() - 1) / (c_size - 1);
+            int row = pos.y() / c_size;
+            int column = (pos.x() - 1) / (c_size - 1);
+
+            if (column > 15
+            || (!m_is256ColorMode && row >= m_images.size())
+            || (m_is256ColorMode && row >= 16))
+            {
+                return;
+            }
+
+            int paletteIndex = m_is256ColorMode ? m_index : row;
+            int colorIndex = m_is256ColorMode ? row * 16 + column : column;
+
+            if (paletteIndex < 0)
+            {
+                return;
+            }
 
             if (event->button() == Qt::LeftButton)
             {
@@ -301,13 +353,25 @@ void PaletteGraphicsView::updateInfo()
         return;
     }
 
+    // TODO: 256 color show correct index and color
     QPoint pos = getPixelPos(m_mousePos);
-    if (pos.x() != 0 && pos.x() <= (c_size - 1) * 16 && pos.y() < m_images.size() * c_size)
+    if (pos.x() != 0 && pos.x() <= (c_size - 1) * 16)
     {
-        int paletteIndex = pos.y() / c_size;
-        int colorIndex = (pos.x() - 1) / (c_size - 1);
+        int row = pos.y() / c_size;
+        int column = (pos.x() - 1) / (c_size - 1);
 
-        if (paletteIndex >= m_images.size() || colorIndex > 15)
+        if (column > 15
+        || (!m_is256ColorMode && row >= m_images.size())
+        || (m_is256ColorMode && row >= 16))
+        {
+            closeInfo();
+            return;
+        }
+
+        int paletteIndex = m_is256ColorMode ? m_index : row;
+        int colorIndex = m_is256ColorMode ? row * 16 + column : column;
+
+        if (paletteIndex < 0)
         {
             closeInfo();
             return;
@@ -317,7 +381,7 @@ void PaletteGraphicsView::updateInfo()
         Palette const palette = image->colorTable();
         QColor color = palette[colorIndex];
 
-        m_infoWindow->setColor(color, paletteIndex);
+        m_infoWindow->setColor(color, paletteIndex, colorIndex);
         m_infoWindow->show();
         m_infoWindow->raise();
         m_infoWindow->move(QCursor::pos() + QPoint(2,2));

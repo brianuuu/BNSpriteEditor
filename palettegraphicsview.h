@@ -44,6 +44,7 @@ protected:
 
 private:
     QPoint getPixelPos(QPoint pos);
+    void setHighlightImage();
 
 signals:
     void colorChanged(int paletteIndex, int colorIndex, QRgb color);
@@ -60,6 +61,8 @@ private:
 
     QTimer* m_timer;
     PaletteInfoWindow* m_infoWindow;
+
+    bool m_is256ColorMode;
 
     int m_index;
     bool m_mouseEventEnabled;

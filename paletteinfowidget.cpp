@@ -16,9 +16,9 @@ PaletteInfoWidget::~PaletteInfoWidget()
     delete ui;
 }
 
-void PaletteInfoWidget::setColor(QColor color, int index)
+void PaletteInfoWidget::setColor(QColor color, int paletteIndex, int colorIndex)
 {
-    ui->Palette_Index->setText(QString::number(index));
+    ui->Palette_Index->setText(QString::number(paletteIndex) + ":" + QString::number(colorIndex));
 
     ui->Color_R->setText(QString::number(color.red()));
     ui->Color_G->setText(QString::number(color.green()));

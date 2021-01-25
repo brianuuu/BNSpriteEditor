@@ -207,7 +207,7 @@ void BNSpriteEditor::ImportSprite(bool isSFSprite)
     ui->Sprite_Name->setText(file.mid(index + 1));
     ui->Sprite_Name->setCursorPosition(0);
 
-    // Load BN Sprite file
+    // Load sprite file
     string errorMsg;
     bool success = false;
     if (isSFSprite)
@@ -290,7 +290,7 @@ void BNSpriteEditor::ExportSprite(bool isSFSprite)
     // Overwrite palette
     ReplacePaletteInSprite();
 
-    // Save BN sprite file
+    // Save sprite file
     string errorMsg;
     bool success = false;
     if (isSFSprite)
@@ -385,22 +385,55 @@ void BNSpriteEditor::on_actionMerge_Sprite_triggered()
 {
     if (!m_sprite.IsLoaded()) return;
 
+    bool isSFSprite = true;
+    if (!m_sprite.Is256Color())
+    {
+        QMessageBox msgBox;
+        msgBox.setWindowTitle("Merga Sprite");
+        msgBox.setIcon(QMessageBox::Question);
+        QString message = "Do you want to merge BN or SF sprite?";
+        msgBox.setText(message);
+        QAbstractButton* pButtonBN = msgBox.addButton("BN", QMessageBox::YesRole);
+        QAbstractButton* pButtonSF = msgBox.addButton("SF", QMessageBox::YesRole);
+        QAbstractButton* pButtonCancel = msgBox.addButton("Cancel", QMessageBox::NoRole);
+        msgBox.exec();
+        QAbstractButton* clickedButton = msgBox.clickedButton();
+        if (clickedButton == pButtonCancel)
+        {
+            return;
+        }
+        else
+        {
+            isSFSprite = (clickedButton == pButtonSF);
+        }
+    }
+
     QString path = "";
     if (!m_path.isEmpty())
     {
         path = m_path;
     }
 
-    QString file = QFileDialog::getOpenFileName(this, tr("Merga Sprite"), path, IMPORT_EXTENSIONS);
+    QString file = QFileDialog::getOpenFileName(this, tr("Merga Sprite"), path, isSFSprite ? IMPORT_EXTENSIONS_SF : IMPORT_EXTENSIONS);
     if (file == Q_NULLPTR) return;
 
     // Save directory
     QFileInfo info(file);
     m_path = info.dir().absolutePath();
 
-    // Load BN Sprite file
+    // Load sprite file
     string errorMsg;
-    if (!m_spriteMerge.LoadBN(file.toStdWString(), errorMsg))
+    bool success = false;
+    if (isSFSprite)
+    {
+        success = m_spriteMerge.LoadSF(file.toStdWString(), errorMsg);
+    }
+    else
+    {
+        success = m_spriteMerge.LoadBN(file.toStdWString(), errorMsg);
+    }
+
+    if (!success)
     {
         QMessageBox::critical(this, "Error", QString::fromStdString(errorMsg), QMessageBox::Ok);
     }
@@ -411,16 +444,32 @@ void BNSpriteEditor::on_actionMerge_Sprite_triggered()
         if (m_sprite.Merge(m_spriteMerge, errorMsg))
         {
             // Import additional palettes
-            int const paletteGroupCount = m_paletteGroups.size();
-            vector<BNSprite::PaletteGroup> paletteGroups;
-            m_sprite.GetAllPaletteGroups(paletteGroups);
-            for (int i = paletteGroupCount; i < paletteGroups.size(); i++)
+            if (m_sprite.Is256Color())
             {
-                AddPaletteGroupFromSprite(paletteGroups[i]);
-            }
+                // 256 color append to current group (just reload it)
+                m_paletteGroups.clear();
+                vector<BNSprite::PaletteGroup> paletteGroups;
+                m_sprite.GetAllPaletteGroups(paletteGroups);
+                AddPaletteGroupFromSprite(paletteGroups[0]);
 
-            // Set new palette group limit
-            ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
+                // Set new palette group/index limit
+                int group = ui->Palette_SB_Group->value();
+                ui->Palette_SB_Index->setMaximum(m_paletteGroups[group].size() - 1);
+            }
+            else
+            {
+                // 16 color append new groups
+                int const paletteGroupCount = m_paletteGroups.size();
+                vector<BNSprite::PaletteGroup> paletteGroups;
+                m_sprite.GetAllPaletteGroups(paletteGroups);
+                for (int i = paletteGroupCount; i < paletteGroups.size(); i++)
+                {
+                    AddPaletteGroupFromSprite(paletteGroups[i]);
+                }
+
+                // Set new palette group limit
+                ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
+            }
 
             // Generate additional thumbnails
             int const animationCountNew = m_sprite.GetAnimationCount();
@@ -668,6 +717,12 @@ void BNSpriteEditor::on_actionConvert_Sprite_to_be_Compatible_with_SF_triggered(
     if (IsCustomSpriteMakerActive())
     {
         QMessageBox::critical(this, "Error", "You should not use this while making custom sprites, set this in build option instead.", QMessageBox::Ok);
+        return;
+    }
+
+    if (m_sprite.Is256Color())
+    {
+        QMessageBox::information(this, "Convert to SF", "Sprite is already compatible with SF.", QMessageBox::Ok);
         return;
     }
 
@@ -1220,7 +1275,7 @@ void BNSpriteEditor::on_Frame_LW_currentItemChanged(QListWidgetItem *current, QL
     // Palette
     int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
     ui->Palette_SB_Group->setValue(m_frame.m_paletteGroupID);
-    ui->Palette_SB_Group->setEnabled(true);
+    ui->Palette_SB_Group->setEnabled(!m_sprite.Is256Color());
     ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_SB_Index->setEnabled(true);
     ui->Palette_PB_Import->setEnabled(!IsCustomSpriteMakerActive());
@@ -1593,7 +1648,7 @@ void BNSpriteEditor::on_Tileset_PB_Import_clicked()
     QFileInfo info(file);
     m_path = info.dir().absolutePath();
 
-    // Load BN Sprite file
+    // Import tileset
     string errorMsg;
     if (!m_sprite.ImportTileset(ui->Tileset_SB_Index->value(), file.toStdWString(), errorMsg))
     {
@@ -1647,7 +1702,7 @@ void BNSpriteEditor::on_Tileset_PB_Export_clicked()
     QFileInfo info(file);
     m_path = info.dir().absolutePath();
 
-    // Load BN Sprite file
+    // Export tileset
     string errorMsg;
     if (!m_sprite.ExportTileset(ui->Tileset_SB_Index->value(), file.toStdWString(), errorMsg))
     {
@@ -1708,6 +1763,20 @@ void BNSpriteEditor::UpdateDrawTileset()
     dummyOAM.m_posX = 0;
     dummyOAM.m_posY = 0;
     DrawOAMInImage(dummyOAM, m_tilesetImage, 0, 0, m_tilesetData, true);
+
+    // convert to ARGB so we can use more than 256 colors and draw transparency
+    m_tilesetImage->convertTo(QImage::Format_ARGB32);
+    int emptyTile = tileXCount * tileYCount - tileCount;
+    if (emptyTile > 0)
+    {
+        for (int y = (tileYCount - 1) * 8; y < tileYCount * 8; y++)
+        {
+            for (int x = (tileXCount - emptyTile) * 8; x < tileXCount * 8; x++)
+            {
+                m_tilesetImage->setPixel(x,y,0);
+            }
+        }
+    }
 
     m_tilesetGraphic->clear();
     m_tilesetGraphic->setSceneRect(0, 0, m_tilesetImage->width(), m_tilesetImage->height());
@@ -2170,6 +2239,8 @@ void BNSpriteEditor::on_Palette_SB_Group_valueChanged(int arg1)
 
 void BNSpriteEditor::on_Palette_SB_Index_valueChanged(int arg1)
 {
+    if (!ui->Palette_SB_Index->isEnabled()) return;
+
     int objectID = ui->Object_Tabs->currentIndex();
     BNSprite::Object& object = m_frame.m_objects[objectID];
 
@@ -2183,7 +2254,7 @@ void BNSpriteEditor::on_Palette_SB_Index_valueChanged(int arg1)
         ui->Palette_Warning->setHidden(true);
     }
 
-    if (object.m_paletteIndex == arg1 || !ui->Palette_SB_Index->isEnabled()) return;
+    if (object.m_paletteIndex == arg1) return;
     object.m_paletteIndex = arg1;
 
     int maximum = m_paletteGroups[m_frame.m_paletteGroupID].size() - 1;
@@ -2411,7 +2482,7 @@ void BNSpriteEditor::on_PaletteContexMenu_requested(int paletteIndex, int colorI
 {
     int group = ui->Palette_SB_Group->value();
     PaletteGroup const& palGroup = m_paletteGroups[group];
-    if (paletteIndex >= palGroup.size() || colorIndex > 15) return;
+    if (paletteIndex >= palGroup.size() || colorIndex >= palGroup[paletteIndex].size()) return;
 
     // cannot delete if there's only one palette or using custom sprite maker
     m_paletteContextMenu->deletePaletteAction->setEnabled(palGroup.size() > 1 && !IsCustomSpriteMakerActive());
@@ -2444,7 +2515,7 @@ void BNSpriteEditor::on_PaletteContexMenu_colorReplaced()
     int colorIndex = m_paletteContextMenu->getColorIndex();
 
     PaletteGroup const& palGroup = m_paletteGroups[group];
-    if (paletteIndex >= palGroup.size() || colorIndex > 15) return;
+    if (paletteIndex >= palGroup.size() || colorIndex >= palGroup[paletteIndex].size()) return;
 
     QRgb const color = m_paletteContextMenu->getColorcopied();
     if ((color >> 24) == 0xFF)
