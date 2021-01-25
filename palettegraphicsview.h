@@ -45,6 +45,7 @@ protected:
 private:
     QPoint getPixelPos(QPoint pos);
     void setHighlightImage();
+    QImage get256ColorImage(QImage const* imageIndexed);
 
 signals:
     void colorChanged(int paletteIndex, int colorIndex, QRgb color);

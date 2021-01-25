@@ -2319,6 +2319,17 @@ void BNSpriteEditor::on_Palette_PB_Down_pressed()
 
 void BNSpriteEditor::on_Palette_PB_Import_pressed()
 {
+    if (m_sprite.Is256Color())
+    {
+        QMessageBox::StandardButton resBtn = QMessageBox::Yes;
+        QString message = "256 color sprite can only import one palette at a time, is that okay?";
+        resBtn = QMessageBox::warning(this, "Import Palette", message, QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (resBtn == QMessageBox::No)
+        {
+            return;
+        }
+    }
+
     QString path = "";
     if (!m_path.isEmpty())
     {
@@ -2343,27 +2354,40 @@ void BNSpriteEditor::on_Palette_PB_Import_pressed()
     // File size
     fseek(f, 0, SEEK_END);
     uint32_t fileSize = ftell(f);
-    if (fileSize % 0x20 != 0)
+
+    if (m_sprite.Is256Color())
     {
-        QMessageBox::critical(this, "Error", "Invalid palette file, it must be a multiple of 0x20 bytes!");
-        fclose(f);
-        return;
+        if (fileSize != 0x20 * 16)
+        {
+            QMessageBox::critical(this, "Error", "256 color sprite can only import one palette at a time (0x200 bytes)!");
+            fclose(f);
+            return;
+        }
+    }
+    else
+    {
+        if (fileSize % 0x20 != 0)
+        {
+            QMessageBox::critical(this, "Error", "Invalid palette file, it must be a multiple of 0x20 bytes!");
+            fclose(f);
+            return;
+        }
+
+        if (fileSize > (0x20 * 256))
+        {
+            QMessageBox::critical(this, "Error", "Cannot import more than 256 palettes!");
+            fclose(f);
+            return;
+        }
     }
 
-    if (fileSize > (0x20 * 256))
-    {
-        QMessageBox::critical(this, "Error", "Cannot import more than 256 palettes!");
-        fclose(f);
-        return;
-    }
 
     fseek(f, 0x00, SEEK_SET);
     PaletteGroup tempGroup;
     while((uint32_t)ftell(f) < fileSize)
     {
-        // TODO: 256 color support?
         Palette tempPal;
-        for (uint8_t i = 0; i < 16; i++)
+        for (uint16_t i = 0; i < (m_sprite.Is256Color() ? 256 : 16); i++)
         {
             uint8_t byte, byte2;
             fread(&byte, 1, 1, f);
@@ -2379,12 +2403,22 @@ void BNSpriteEditor::on_Palette_PB_Import_pressed()
     QMessageBox msgBox;
     msgBox.setWindowTitle("Import Palette");
     msgBox.setIcon(QMessageBox::Question);
-    QString message = "Do you want to append palettes, replace current group or create new group?";
-    message += "\n(WARNING: If the number of palette imported to replace is fewer than what it currently has, palette indices of frames will be clamped!)";
+
+    QString message;
+    if (m_sprite.Is256Color())
+    {
+        message = "Do you want to append palettes, or replace current palette?";
+    }
+    else
+    {
+        message = "Do you want to append palettes, replace current group or create new group?";
+        message += "\n(WARNING: If the number of palette imported to replace is fewer than what it currently has, palette indices of frames will be clamped!)";
+    }
+
     msgBox.setText(message);
     QAbstractButton* pButtonAppend = msgBox.addButton("Append", QMessageBox::YesRole);
     QAbstractButton* pButtonReplace = msgBox.addButton("Replace", QMessageBox::YesRole);
-    QAbstractButton* pButtonNewGroup = msgBox.addButton("New Group", QMessageBox::YesRole);
+    QAbstractButton* pButtonNewGroup = m_sprite.Is256Color() ? Q_NULLPTR : msgBox.addButton("New Group", QMessageBox::YesRole);
     QAbstractButton* pButtonCancel = msgBox.addButton("Cancel", QMessageBox::NoRole);
     msgBox.exec();
 
@@ -2405,7 +2439,11 @@ void BNSpriteEditor::on_Palette_PB_Import_pressed()
     {
         if (clickedButton == pButtonReplace)
         {
-            palGroup.clear();
+            // 16 color: replace the entire group
+            if (!m_sprite.Is256Color())
+            {
+                palGroup.clear();
+            }
         }
         else if (palGroup.size() + tempGroup.size() > 256)
         {
@@ -2413,9 +2451,19 @@ void BNSpriteEditor::on_Palette_PB_Import_pressed()
             return;
         }
 
-        for (Palette const& palette : tempGroup)
+        if (m_sprite.Is256Color() && clickedButton == pButtonReplace)
         {
-            palGroup.push_back(palette);
+            // 256 color: replace current palette
+            int index = ui->Palette_SB_Index->value();
+            palGroup[index] = tempGroup[0];
+        }
+        else
+        {
+            // 16/256 color: append
+            for (Palette const& palette : tempGroup)
+            {
+                palGroup.push_back(palette);
+            }
         }
     }
 
@@ -2454,13 +2502,27 @@ void BNSpriteEditor::on_Palette_PB_Export_pressed()
 
     int group = ui->Palette_SB_Group->value();
     PaletteGroup const& palGroup = m_paletteGroups[group];
-    for (Palette const& pal : palGroup)
+    if (m_sprite.Is256Color())
     {
-        // TODO: 256 color support?
-        for (uint8_t i = 0; i < 16; i++)
+        // 256 color: export current palette
+        int index = ui->Palette_SB_Index->value();
+        Palette const& pal = palGroup[index];
+        for (uint16_t i = 0; i < 256; i++)
         {
             uint16_t const gbaColor = BNSprite::RGBtoGBA(pal[i]);
             fwrite(&gbaColor, 2, 1, f);
+        }
+    }
+    else
+    {
+        // 16 color: export group
+        for (Palette const& pal : palGroup)
+        {
+            for (uint8_t i = 0; i < 16; i++)
+            {
+                uint16_t const gbaColor = BNSprite::RGBtoGBA(pal[i]);
+                fwrite(&gbaColor, 2, 1, f);
+            }
         }
     }
 
@@ -2491,9 +2553,6 @@ void BNSpriteEditor::on_PaletteContexMenu_requested(int paletteIndex, int colorI
     bool enableInsert = palGroup.size() - 1 < 255 && !IsCustomSpriteMakerActive() && !m_paletteContextMenu->getPalettecopied().isEmpty();
     m_paletteContextMenu->insertAboveAction->setEnabled(enableInsert);
     m_paletteContextMenu->insertBelowAction->setEnabled(enableInsert);
-
-    // cannot copy palette for 256 color
-    m_paletteContextMenu->copyPaletteAction->setEnabled(!m_sprite.Is256Color());
 
     Palette const& palette = palGroup[paletteIndex];
     m_paletteContextMenu->setPaletteIndex(paletteIndex);
@@ -2551,8 +2610,14 @@ void BNSpriteEditor::on_PaletteContexMenu_paletteInsertAbove()
     Palette const palette = m_paletteContextMenu->getPalettecopied();
     InsertPalette(insertAt, palette);
 
-    // increment index by one
-    ui->Palette_SB_Index->setValue(ui->Palette_SB_Index->value() + 1);
+    // increment index by one if inserted above current index
+    int index = ui->Palette_SB_Index->value();
+    if (index >= insertAt)
+    {
+        ui->Palette_SB_Index->setValue(index + 1);
+    }
+
+    UpdateAllThumbnails(-1, true);
 }
 
 void BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow()
@@ -2560,6 +2625,15 @@ void BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow()
     int insertAt = m_paletteContextMenu->getPaletteIndex() + 1;
     Palette const palette = m_paletteContextMenu->getPalettecopied();
     InsertPalette(insertAt, palette);
+
+    // increment index by one if inserted above current index
+    int index = ui->Palette_SB_Index->value();
+    if (index >= insertAt)
+    {
+        ui->Palette_SB_Index->setValue(index + 1);
+    }
+
+    UpdateAllThumbnails(-1, true);
 }
 
 void BNSpriteEditor::on_PaletteContexMenu_paletteDeleted()
@@ -2642,14 +2716,12 @@ void BNSpriteEditor::InsertPalette(int insertAt, const Palette palette)
     if (insertAt < 0 || insertAt > palGroup.size()) return;
 
     palGroup.insert(insertAt, palette);
-    ui->Palette_GV->addPalette(palette, false, insertAt);
+    ui->Palette_GV->addPalette(palette, m_sprite.Is256Color(), insertAt);
 
     int maximum = palGroup.size() - 1;
     ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_PB_Up->setEnabled(index > 0 && !IsCustomSpriteMakerActive());
     ui->Palette_PB_Down->setEnabled(index < maximum && !IsCustomSpriteMakerActive());
-
-    UpdateAllThumbnails(-1, true);
 }
 
 //---------------------------------------------------------------------------
@@ -2681,6 +2753,7 @@ void BNSpriteEditor::DeletePalette(int paletteIndex)
     ui->Palette_PB_Down->setEnabled(index < maximum && !IsCustomSpriteMakerActive());
 
     // Redraw preview, OAM, tileset
+    SetPaletteSelected(qMin(maximum, ui->Palette_SB_Index->value()));
     UpdateAllThumbnails(-1, true);
 }
 

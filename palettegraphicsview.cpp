@@ -53,10 +53,12 @@ void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int inser
         {
             if (x == 0 || x % (c_size - 1) == 0 || y == 0 || y % c_size == c_size - 1)
             {
+                // Border
                 image->setPixel(x, y, palette.size() - 1);
             }
             else
             {
+                // Color
                 image->setPixel(x, y, (y / c_size) * 16 + (x / (c_size - 1)));
             }
         }
@@ -70,7 +72,7 @@ void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int inser
         m_images.insert(insertAt, image);
     }
 
-    QGraphicsPixmapItem* item = m_graphicsScene->addPixmap(QPixmap::fromImage(*image));
+    QGraphicsPixmapItem* item = m_graphicsScene->addPixmap(QPixmap::fromImage(m_is256ColorMode ? get256ColorImage(image) : *image));
     if (insertAt == -1 || insertAt > m_pixmapItems.size())
     {
         m_pixmapItems.push_back(item);
@@ -88,13 +90,22 @@ void PaletteGraphicsView::addPalette(Palette palette, bool is256Color, int inser
     else
     {
         m_pixmapItems.insert(insertAt, item);
-        item->setPos(0, insertAt * c_size);
-
-        // Shift everything after this index down
-        for (int i = insertAt + 1 ; i < m_pixmapItems.size(); i++)
+        if (m_is256ColorMode && m_images.size() > 1)
         {
-            QGraphicsPixmapItem* t = m_pixmapItems[i];
-            t->moveBy(0, c_size);
+            // Only allow one 256 color is display at a time
+            item->setPos(0, 0);
+            item->setVisible(false);
+        }
+        else
+        {
+            item->setPos(0, insertAt * c_size);
+
+            // Shift everything after this index down
+            for (int i = insertAt + 1 ; i < m_pixmapItems.size(); i++)
+            {
+                QGraphicsPixmapItem* t = m_pixmapItems[i];
+                t->moveBy(0, c_size);
+            }
         }
     }
 
@@ -154,20 +165,23 @@ void PaletteGraphicsView::deletePalette(int index)
         delete item;
         m_pixmapItems.erase(m_pixmapItems.begin() + index);
 
-        m_graphicsScene->setSceneRect(0, 0, c_width, m_images.size() * 16);
-
-        // Shift everything after this index up
-        for (int i = index ; i < m_pixmapItems.size(); i++)
+        if (!m_is256ColorMode)
         {
-            QGraphicsPixmapItem* item = m_pixmapItems[i];
-            item->moveBy(0, -c_size);
-        }
+            m_graphicsScene->setSceneRect(0, 0, c_width, m_images.size() * 16);
 
-        // Highlight is outside limit, move it up
-        if (m_index == m_pixmapItems.size())
-        {
-            m_index--;
-            m_highlight->moveBy(0, -c_size);
+            // Shift everything after this index up
+            for (int i = index ; i < m_pixmapItems.size(); i++)
+            {
+                QGraphicsPixmapItem* item = m_pixmapItems[i];
+                item->moveBy(0, -c_size);
+            }
+
+            // Highlight is outside limit, move it up
+            if (m_index == m_pixmapItems.size())
+            {
+                m_index--;
+                m_highlight->moveBy(0, -c_size);
+            }
         }
     }
 }
@@ -202,33 +216,22 @@ void PaletteGraphicsView::replaceColor(int paletteIndex, int colorIndex, QRgb co
     palette[colorIndex] = color;
     image->setColorTable(palette);
 
-    m_pixmapItems[paletteIndex]->setPixmap(QPixmap::fromImage(*image));
+    QGraphicsPixmapItem* item = m_pixmapItems[paletteIndex];
+    item->setPixmap(QPixmap::fromImage(m_is256ColorMode ? get256ColorImage(image) : *image));
 }
 
 void PaletteGraphicsView::replacePalette(int paletteIndex, Palette palette)
 {
     if (paletteIndex >= m_images.size()) return;
     Q_ASSERT(palette.size() == 16 || palette.size() == 256);
-
-    // TODO: 256 color support
-
-    // Make sure size is 16
-    while (palette.size() > 16)
-    {
-        palette.pop_back();
-    }
-    while (palette.size() < 16)
-    {
-        palette.push_back(0xFF000000);
-    }
-    palette.push_back(c_unselected);    // 16
+    palette.push_back(c_unselected); // 16/256
     palette[0] |= 0xFF000000; // undo transparency on first color
 
     QImage* image = m_images[paletteIndex];
     image->setColorTable(palette);
 
     QGraphicsPixmapItem* item = m_pixmapItems[paletteIndex];
-    item->setPixmap(QPixmap::fromImage(*image));
+    item->setPixmap(QPixmap::fromImage(m_is256ColorMode ? get256ColorImage(image) : *image));
 }
 
 void PaletteGraphicsView::swapPalette(int id1, int id2)
@@ -278,6 +281,25 @@ void PaletteGraphicsView::setHighlightImage()
     {
         m_highlight = m_graphicsScene->addPixmap(QPixmap::fromImage(image));
     }
+}
+
+QImage PaletteGraphicsView::get256ColorImage(const QImage *imageIndexed)
+{
+    Q_ASSERT(imageIndexed);
+
+    QImage image = imageIndexed->convertToFormat(QImage::Format_ARGB32);
+    for (int y = 0; y < image.height(); y++)
+    {
+        for (int x = 0; x < image.width(); x++)
+        {
+            if (x == 0 || x % (c_size - 1) == 0 || y == 0 || y % c_size == c_size - 1)
+            {
+                image.setPixel(x, y, c_unselected);
+            }
+        }
+    }
+
+    return image;
 }
 
 void PaletteGraphicsView::enterEvent(QEvent *event)
@@ -353,7 +375,6 @@ void PaletteGraphicsView::updateInfo()
         return;
     }
 
-    // TODO: 256 color show correct index and color
     QPoint pos = getPixelPos(m_mousePos);
     if (pos.x() != 0 && pos.x() <= (c_size - 1) * 16)
     {
