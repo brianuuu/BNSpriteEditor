@@ -7,7 +7,7 @@
 #define EXPORT_EXTENSIONS_SF "Memory Dump (*.bin);;SF Sprite (*.sfsa *.sfsprite);;All files (*.*)"
 #define PALETTE_EXTENSIONS "Palette File (*.pal);;All files (*.*)"
 
-static const QString c_programVersion = "v0.3.0";
+static const QString c_programVersion = "v0.3.2";
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -86,6 +86,9 @@ BNSpriteEditor::BNSpriteEditor(QWidget *parent)
     connect(m_paletteContextMenu->insertAboveAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteInsertAbove);
     connect(m_paletteContextMenu->insertBelowAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow);
     connect(m_paletteContextMenu->deletePaletteAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteDeleted);
+
+    // Enable drag and drop to window
+    setAcceptDrops(true);
 }
 
 //---------------------------------------------------------------------------
@@ -166,21 +169,78 @@ void BNSpriteEditor::closeEvent(QCloseEvent *event)
 }
 
 //---------------------------------------------------------------------------
+// Drag event
+//---------------------------------------------------------------------------
+void BNSpriteEditor::dragEnterEvent(QDragEnterEvent *e)
+{
+    if (e->mimeData()->hasUrls())
+    {
+        QString file = e->mimeData()->urls()[0].toLocalFile();
+        QString fileLower = file.toLower();
+
+        if (IsCustomSpriteMakerActive())
+        {
+            // Only accept custom sprite project when csm is active
+            if (fileLower.endsWith(".csp"))
+            {
+                e->acceptProposedAction();
+            }
+        }
+        else
+        {
+            if (fileLower.endsWith(".bnsa") || fileLower.endsWith(".bnsprite") || fileLower.endsWith(".dmp")
+             || fileLower.endsWith(".sfsa") || fileLower.endsWith(".sfsprite") || fileLower.endsWith(".bin")
+             || fileLower.endsWith(".csp"))
+            {
+                e->acceptProposedAction();
+            }
+        }
+    }
+}
+
+//---------------------------------------------------------------------------
+// Drop event
+//---------------------------------------------------------------------------
+void BNSpriteEditor::dropEvent(QDropEvent *e)
+{
+    QString file = e->mimeData()->urls()[0].toLocalFile();
+    passArgument(file, true);
+}
+
+//---------------------------------------------------------------------------
+// Drag drop file to .exe
+//---------------------------------------------------------------------------
+void BNSpriteEditor::passArgument(const QString &file, bool showSuccess)
+{
+    QString fileLower = file.toLower();
+    if (fileLower.endsWith(".bnsa") || fileLower.endsWith(".bnsprite") || fileLower.endsWith(".dmp"))
+    {
+        ImportSprite(file, false, showSuccess);
+    }
+    else if (fileLower.endsWith(".sfsa") || fileLower.endsWith(".sfsprite") || fileLower.endsWith(".bin"))
+    {
+        ImportSprite(file, true, showSuccess);
+    }
+    else if (fileLower.endsWith(".csp"))
+    {
+        on_actionCustom_Sprite_Manager_triggered();
+        if (m_csm)
+        {
+            m_csm->LoadProject(file);
+        }
+    }
+    else
+    {
+        QMessageBox::critical(this, "Error", "Unknown file extension!", QMessageBox::Ok);
+    }
+}
+
+//---------------------------------------------------------------------------
 // Action slots
 //---------------------------------------------------------------------------
 void BNSpriteEditor::on_actionImport_Sprite_triggered()
 {
-    ImportSprite(false);
-}
-
-void BNSpriteEditor::on_actionImport_SF_Sprite_triggered()
-{
-    ImportSprite(true);
-}
-
-void BNSpriteEditor::ImportSprite(bool isSFSprite)
-{
-    if (m_csm != Q_NULLPTR && m_csm->isVisible())
+    if (IsCustomSpriteMakerActive())
     {
         QMessageBox::warning(this, "Import Sprite", "Sprite import is not allowed while Custom Sprite Manager editing is active.", QMessageBox::Ok);
         return;
@@ -192,9 +252,34 @@ void BNSpriteEditor::ImportSprite(bool isSFSprite)
         path = m_path;
     }
 
-    QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, isSFSprite ? IMPORT_EXTENSIONS_SF : IMPORT_EXTENSIONS);
+    QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, IMPORT_EXTENSIONS);
     if (file == Q_NULLPTR) return;
 
+    ImportSprite(file, false, true);
+}
+
+void BNSpriteEditor::on_actionImport_SF_Sprite_triggered()
+{
+    if (IsCustomSpriteMakerActive())
+    {
+        QMessageBox::warning(this, "Import Sprite", "Sprite import is not allowed while Custom Sprite Manager editing is active.", QMessageBox::Ok);
+        return;
+    }
+
+    QString path = "";
+    if (!m_path.isEmpty())
+    {
+        path = m_path;
+    }
+
+    QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, IMPORT_EXTENSIONS_SF);
+    if (file == Q_NULLPTR) return;
+
+    ImportSprite(file, true, true);
+}
+
+void BNSpriteEditor::ImportSprite(QString const& file, bool isSFSprite, bool showSuccess)
+{
     // Save directory
     QFileInfo info(file);
     m_path = info.dir().absolutePath();
@@ -226,7 +311,10 @@ void BNSpriteEditor::ImportSprite(bool isSFSprite)
     else
     {
         LoadSpriteToUI();
-        QMessageBox::information(this, "Open", "File load successful!", QMessageBox::Ok);
+        if (showSuccess)
+        {
+            QMessageBox::information(this, "Open", "File load successful!", QMessageBox::Ok);
+        }
     }
 }
 
@@ -674,7 +762,7 @@ void BNSpriteEditor::on_actionAbout_Qt_triggered()
 
 void BNSpriteEditor::on_actionCustom_Sprite_Manager_triggered()
 {
-    if (m_sprite.IsLoaded())
+    if (!IsCustomSpriteMakerActive() && m_sprite.IsLoaded())
     {
         QMessageBox::StandardButton resBtn = QMessageBox::Yes;
         QString message = "Using Custom Sprite Manager will close the current sprite.\nDo you wish to continue?";
@@ -3869,6 +3957,14 @@ void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, uint32_t saveVersi
 
     // Load palette
     in >> m_paletteGroups;
+    for (PaletteGroup& group : m_paletteGroups)
+    {
+        for (Palette& palette : group)
+        {
+            // Add transparency back
+            palette[0] &= 0x00FFFFFF;
+        }
+    }
     ui->Palette_SB_Group->setValue(0);
     ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
 

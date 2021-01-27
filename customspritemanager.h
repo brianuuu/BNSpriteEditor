@@ -31,7 +31,12 @@ public:
     bool eventFilter(QObject *object, QEvent *event);
     void closeEvent (QCloseEvent *event);
 
+    // Easy file reading
+    void dragEnterEvent(QDragEnterEvent *e);
+    void dropEvent(QDropEvent *e);
+
     void SetDefaultPath(QString _path) {m_path = _path;}
+    void LoadProject(QString const& file);
 
     // Build Sprite external functions
     void GetRawTilesetData(int tilesetID, std::vector<uint8_t>& data);

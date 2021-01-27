@@ -36,6 +36,11 @@ public:
     bool eventFilter(QObject *object, QEvent *event);
     void closeEvent (QCloseEvent *event);
 
+    // Easy file reading
+    void dragEnterEvent(QDragEnterEvent *e);
+    void dropEvent(QDropEvent *e);
+    void passArgument(QString const& file, bool showSuccess);
+
 private slots:
     // Actions
     void on_actionImport_Sprite_triggered();
@@ -168,7 +173,7 @@ private:
     void ResetSubFrame();
 
     bool IsCustomSpriteMakerActive() { return m_csm && m_csm->isVisible(); }
-    void ImportSprite(bool isSFSprite);
+    void ImportSprite(QString const& file, bool isSFSprite, bool showSuccess);
     void ExportSprite(bool isSFSprite);
     void ReplacePaletteInSprite();
     void LoadSpriteToUI();

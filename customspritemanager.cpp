@@ -66,6 +66,9 @@ CustomSpriteManager::CustomSpriteManager(QWidget *parent) :
     connect(ui->Frame_LW, SIGNAL(keyUpDownSignal(QListWidgetItem*)), this, SLOT(on_Frame_LW_itemPressed(QListWidgetItem*)));
 
     ResetProgram();
+
+    // Enable drag and drop to window
+    setAcceptDrops(true);
 }
 
 //---------------------------------------------------------------------------
@@ -191,6 +194,25 @@ void CustomSpriteManager::closeEvent(QCloseEvent *event)
     event->accept();
 }
 
+void CustomSpriteManager::dragEnterEvent(QDragEnterEvent *e)
+{
+    if (e->mimeData()->hasUrls())
+    {
+        QString file = e->mimeData()->urls()[0].toLocalFile();
+        QString fileLower = file.toLower();
+        if (fileLower.endsWith(".csp"))
+        {
+            e->acceptProposedAction();
+        }
+    }
+}
+
+void CustomSpriteManager::dropEvent(QDropEvent *e)
+{
+    QString file = e->mimeData()->urls()[0].toLocalFile();
+    LoadProject(file);
+}
+
 //---------------------------------------------------------------------------
 // Action slots
 //---------------------------------------------------------------------------
@@ -205,6 +227,11 @@ void CustomSpriteManager:: on_actionLoad_Project_triggered()
     QString file = QFileDialog::getOpenFileName(this, tr("Load Project"), path, "Custom Sprite Project (*.csp)");
     if (file == Q_NULLPTR) return;
 
+    LoadProject(file);
+}
+
+void CustomSpriteManager::LoadProject(const QString &file)
+{
     // Save directory
     QFileInfo info(file);
     m_path = info.dir().absolutePath();
