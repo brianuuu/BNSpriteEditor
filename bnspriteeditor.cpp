@@ -86,6 +86,7 @@ BNSpriteEditor::BNSpriteEditor(QWidget *parent)
     connect(m_paletteContextMenu->insertAboveAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteInsertAbove);
     connect(m_paletteContextMenu->insertBelowAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow);
     connect(m_paletteContextMenu->deletePaletteAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_paletteDeleted);
+    connect(m_paletteContextMenu->copyPageAction, &QAction::triggered, this, &BNSpriteEditor::on_PaletteContexMenu_pageCopied);
 
     // Enable drag and drop to window
     setAcceptDrops(true);
@@ -2642,6 +2643,9 @@ void BNSpriteEditor::on_PaletteContexMenu_requested(int paletteIndex, int colorI
     m_paletteContextMenu->insertAboveAction->setEnabled(enableInsert);
     m_paletteContextMenu->insertBelowAction->setEnabled(enableInsert);
 
+    // There's no point copying the transparent color
+    m_paletteContextMenu->copyColorAction->setEnabled(colorIndex != 0);
+
     Palette const& palette = palGroup[paletteIndex];
     m_paletteContextMenu->setPaletteIndex(paletteIndex);
     m_paletteContextMenu->setColorIndex(colorIndex);
@@ -2683,7 +2687,8 @@ void BNSpriteEditor::on_PaletteContexMenu_paletteReplaced()
     int paletteIndex = m_paletteContextMenu->getPaletteIndex();
 
     Palette& palette = m_paletteGroups[group][paletteIndex];
-    Palette const paletteNew = m_paletteContextMenu->getPalettecopied();
+    Palette paletteNew = m_paletteContextMenu->getPalettecopied();
+    paletteNew[0] &= 0x00FFFFFF; // add back transparency
 
     if (palette.size() != paletteNew.size()) return;
     palette = paletteNew;
@@ -2697,15 +2702,6 @@ void BNSpriteEditor::on_PaletteContexMenu_paletteInsertAbove()
     int insertAt = m_paletteContextMenu->getPaletteIndex();
     Palette const palette = m_paletteContextMenu->getPalettecopied();
     InsertPalette(insertAt, palette);
-
-    // increment index by one if inserted above current index
-    int index = ui->Palette_SB_Index->value();
-    if (index >= insertAt)
-    {
-        ui->Palette_SB_Index->setValue(index + 1);
-    }
-
-    UpdateAllThumbnails(-1, true);
 }
 
 void BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow()
@@ -2713,21 +2709,29 @@ void BNSpriteEditor::on_PaletteContexMenu_paletteInsertBelow()
     int insertAt = m_paletteContextMenu->getPaletteIndex() + 1;
     Palette const palette = m_paletteContextMenu->getPalettecopied();
     InsertPalette(insertAt, palette);
-
-    // increment index by one if inserted above current index
-    int index = ui->Palette_SB_Index->value();
-    if (index >= insertAt)
-    {
-        ui->Palette_SB_Index->setValue(index + 1);
-    }
-
-    UpdateAllThumbnails(-1, true);
 }
 
 void BNSpriteEditor::on_PaletteContexMenu_paletteDeleted()
 {
     int paletteIndex = m_paletteContextMenu->getPaletteIndex();
     DeletePalette(paletteIndex);
+}
+
+void BNSpriteEditor::on_PaletteContexMenu_pageCopied()
+{
+    int group = ui->Palette_SB_Group->value();
+    int paletteIndex = m_paletteContextMenu->getPaletteIndex();
+
+    PaletteGroup palGroup;
+    if (m_sprite.Is256Color())
+    {
+        palGroup.push_back(m_paletteGroups[group][paletteIndex]);
+    }
+    else
+    {
+        palGroup = m_paletteGroups[group];
+    }
+    m_paletteContextMenu->copyPageToClipboard(palGroup);
 }
 
 //---------------------------------------------------------------------------
@@ -2790,12 +2794,43 @@ void BNSpriteEditor::SwapPalette(int id1, int id2)
     qSwap(palGroup[id1], palGroup[id2]);
 
     ui->Palette_GV->swapPalette(id1, id2);
+
+    // Fix all frame palette index
+    int animationCount = m_sprite.GetAnimationCount();
+    for (int animID = 0; animID < animationCount; animID++)
+    {
+        vector<BNSprite::Frame> frames;
+        m_sprite.GetAnimationFrames(animID, frames);
+        for (int frameID = 0; frameID < frames.size(); frameID++)
+        {
+            bool updated = false;
+            BNSprite::Frame& frame = frames[frameID];
+            for (BNSprite::Object& obj : frame.m_objects)
+            {
+                if (obj.m_paletteIndex == id1)
+                {
+                    obj.m_paletteIndex = id2;
+                    updated = true;
+                }
+                else if (obj.m_paletteIndex == id2)
+                {
+                    obj.m_paletteIndex = id1;
+                    updated = true;
+                }
+            }
+
+            if (updated)
+            {
+                m_sprite.ReplaceFrame(animID, frameID, frame);
+            }
+        }
+    }
 }
 
 //---------------------------------------------------------------------------
 // Insert a new palette at
 //---------------------------------------------------------------------------
-void BNSpriteEditor::InsertPalette(int insertAt, const Palette palette)
+void BNSpriteEditor::InsertPalette(int insertAt, Palette palette)
 {
     int group = ui->Palette_SB_Group->value();
     int index = ui->Palette_SB_Index->value();
@@ -2803,6 +2838,7 @@ void BNSpriteEditor::InsertPalette(int insertAt, const Palette palette)
     PaletteGroup& palGroup = m_paletteGroups[group];
     if (insertAt < 0 || insertAt > palGroup.size()) return;
 
+    palette[0] &= 0x00FFFFFF; // add back transparency
     palGroup.insert(insertAt, palette);
     ui->Palette_GV->addPalette(palette, m_sprite.Is256Color(), insertAt);
 
@@ -2810,6 +2846,40 @@ void BNSpriteEditor::InsertPalette(int insertAt, const Palette palette)
     ui->Palette_SB_Index->setMaximum(qMin(maximum, 255));
     ui->Palette_PB_Up->setEnabled(index > 0 && !IsCustomSpriteMakerActive());
     ui->Palette_PB_Down->setEnabled(index < maximum && !IsCustomSpriteMakerActive());
+
+    // Fix all frame palette index
+    int animationCount = m_sprite.GetAnimationCount();
+    for (int animID = 0; animID < animationCount; animID++)
+    {
+        vector<BNSprite::Frame> frames;
+        m_sprite.GetAnimationFrames(animID, frames);
+        for (int frameID = 0; frameID < frames.size(); frameID++)
+        {
+            bool updated = false;
+            BNSprite::Frame& frame = frames[frameID];
+            for (BNSprite::Object& obj : frame.m_objects)
+            {
+                if (obj.m_paletteIndex >= insertAt)
+                {
+                    obj.m_paletteIndex++;
+                    updated = true;
+                }
+            }
+
+            if (updated)
+            {
+                m_sprite.ReplaceFrame(animID, frameID, frame);
+            }
+        }
+    }
+
+    // increment index by one if inserted above current index
+    if (index >= insertAt)
+    {
+        ui->Palette_SB_Index->setValue(index + 1);
+    }
+
+    UpdateAllThumbnails(-1, true);
 }
 
 //---------------------------------------------------------------------------
@@ -2840,8 +2910,37 @@ void BNSpriteEditor::DeletePalette(int paletteIndex)
     ui->Palette_PB_Up->setEnabled(index > 0 && !IsCustomSpriteMakerActive());
     ui->Palette_PB_Down->setEnabled(index < maximum && !IsCustomSpriteMakerActive());
 
+    // Fix all frame palette index
+    int animationCount = m_sprite.GetAnimationCount();
+    for (int animID = 0; animID < animationCount; animID++)
+    {
+        vector<BNSprite::Frame> frames;
+        m_sprite.GetAnimationFrames(animID, frames);
+        for (int frameID = 0; frameID < frames.size(); frameID++)
+        {
+            bool updated = false;
+            BNSprite::Frame& frame = frames[frameID];
+            for (BNSprite::Object& obj : frame.m_objects)
+            {
+                if (obj.m_paletteIndex > paletteIndex)
+                {
+                    obj.m_paletteIndex--;
+                    updated = true;
+                }
+            }
+
+            if (updated)
+            {
+                m_sprite.ReplaceFrame(animID, frameID, frame);
+            }
+        }
+    }
+
     // Redraw preview, OAM, tileset
-    SetPaletteSelected(qMin(maximum, ui->Palette_SB_Index->value()));
+    if (index > paletteIndex)
+    {
+        ui->Palette_SB_Index->setValue(qMin(maximum, index - 1));
+    }
     UpdateAllThumbnails(-1, true);
 }
 

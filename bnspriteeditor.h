@@ -119,6 +119,7 @@ private slots:
     void on_PaletteContexMenu_paletteInsertAbove();
     void on_PaletteContexMenu_paletteInsertBelow();
     void on_PaletteContexMenu_paletteDeleted();
+    void on_PaletteContexMenu_pageCopied();
 
     // Object
     void on_Object_Tabs_currentChanged(int index);
@@ -224,7 +225,7 @@ private:
     void SetPaletteSelected(int index);
     void UpdatePalettePreview();
     void SwapPalette(int id1, int id2);
-    void InsertPalette(int insertAt, Palette const palette);
+    void InsertPalette(int insertAt, Palette palette);
     void DeletePalette(int paletteIndex);
     void UpdateAllThumbnails(int paletteIndex, bool redrawAll = false);
 
