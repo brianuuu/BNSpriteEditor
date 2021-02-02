@@ -18,6 +18,7 @@ public:
 
     void setEmptyFrame(bool checked);
     void setEvenOAM(bool checked);
+    void setEvenOAMEnabled(bool enabled);
 
     bool getEmptyFrame();
     bool getEvenOAM();

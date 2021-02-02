@@ -3988,6 +3988,13 @@ void BNSpriteEditor::on_CSM_BuildSprite_pressed(int tilesetCount)
             palette[0] &= 0x00FFFFFF;
         }
     }
+
+    if (!m_paletteGroups[0].isEmpty())
+    {
+        bool is256Color = m_paletteGroups[0][0].size() == 256;
+        m_sprite.Set256Color(is256Color);
+        ui->Palette_SB_Group->setEnabled(!is256Color);
+    }
     ui->Palette_SB_Group->setValue(0);
     ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);
 
@@ -4063,6 +4070,13 @@ void BNSpriteEditor::on_CSM_LoadProject_pressed(QString file, uint32_t saveVersi
             // Add transparency back
             palette[0] &= 0x00FFFFFF;
         }
+    }
+
+    if (!m_paletteGroups[0].isEmpty())
+    {
+        bool is256Color = m_paletteGroups[0][0].size() == 256;
+        m_sprite.Set256Color(is256Color);
+        ui->Palette_SB_Group->setEnabled(!is256Color);
     }
     ui->Palette_SB_Group->setValue(0);
     ui->Palette_SB_Group->setMaximum(m_paletteGroups.size() - 1);

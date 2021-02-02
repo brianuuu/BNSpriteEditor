@@ -187,6 +187,8 @@ private slots:
     void on_actionSave_Project_triggered();
 
     // Palette
+    void on_Palette_RB_16Mode_clicked();
+    void on_Palette_RB_256Mode_clicked();
     void on_Palette_PB_NewPal_clicked();
     void on_Palette_PB_DelPal_clicked();
     void on_Palette_PB_NewGroup_clicked();

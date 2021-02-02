@@ -5,10 +5,11 @@
 #define USE_FIRST_FIT_OAM 0
 
 // Save version
-static const uint32_t c_saveVersion = 3;
+static const uint32_t c_saveVersion = 4;
 // 1: initial save version
 // 2: fix for m_startTile changed from uint8_t to uint16_t
 // 3: added m_evenOAM
+// 4: added 16/256 color mode
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -247,6 +248,21 @@ void CustomSpriteManager::LoadProject(const QString &file)
     uint32_t saveVersion = 0;
     in >> saveVersion;
 
+    // Load color mode
+    if (saveVersion >= 4)
+    {
+        bool colorMode16;
+        in >> colorMode16;
+        ui->Palette_RB_16Mode->setChecked(colorMode16);
+        ui->Palette_RB_256Mode->setChecked(!colorMode16);
+        ui->Palette_PB_NewGroup->setEnabled(!colorMode16);
+    }
+    else
+    {
+        ui->Palette_RB_16Mode->setChecked(true);
+        ui->Palette_RB_256Mode->setChecked(false);
+    }
+
     // Load palette
     in >> m_paletteGroups;
     ui->Palette_SB_Group->blockSignals(true);
@@ -255,6 +271,12 @@ void CustomSpriteManager::LoadProject(const QString &file)
     ui->Palette_SB_Index->setEnabled(true);
     ui->Resources_PB_Add->setEnabled(true);
     on_Palette_SB_Group_valueChanged(0);
+
+    if (!m_paletteGroups[0].isEmpty())
+    {
+        ui->Palette_RB_16Mode->setEnabled(false);
+        ui->Palette_RB_256Mode->setEnabled(false);
+    }
 
     // Load resources
     int resourceSize = 0;
@@ -409,6 +431,9 @@ void CustomSpriteManager::on_actionSave_Project_triggered()
     // Save version
     out << c_saveVersion;
 
+    // Save color mode
+    out << ui->Palette_RB_16Mode->isChecked();
+
     // Save palette
     out << m_paletteGroups;
 
@@ -507,12 +532,16 @@ void CustomSpriteManager::ResetProgram()
 
     // Reset palette
     ui->Palette_GV->clear();
+    ui->Palette_RB_16Mode->setEnabled(true);
+    ui->Palette_RB_16Mode->setChecked(true);
+    ui->Palette_RB_256Mode->setEnabled(true);
     ui->Palette_PB_NewGroup->setEnabled(false);
     ui->Palette_PB_DelGroup->setEnabled(false);
     ui->Palette_PB_NewPal->setEnabled(true);
     ui->Palette_PB_DelPal->setEnabled(false);
     ui->Palette_SB_Index->setEnabled(false);
 
+    ui->Palette_SB_Group->setEnabled(ui->Palette_RB_16Mode->isChecked());
     ui->Palette_SB_Group->blockSignals(true);
     ui->Palette_SB_Group->setMaximum(0);
     ui->Palette_SB_Group->blockSignals(false);
@@ -692,6 +721,16 @@ void CustomSpriteManager::UpdateStatus(QString const& status, QColor color)
 //---------------------------------------------------------------------------
 // Palette slots
 //---------------------------------------------------------------------------
+void CustomSpriteManager::on_Palette_RB_16Mode_clicked()
+{
+    ui->Palette_SB_Group->setEnabled(true);
+}
+
+void CustomSpriteManager::on_Palette_RB_256Mode_clicked()
+{
+    ui->Palette_SB_Group->setEnabled(false);
+}
+
 void CustomSpriteManager::on_Palette_PB_NewPal_clicked()
 {
     QString path = "";
@@ -928,14 +967,16 @@ bool CustomSpriteManager::GeneratePaletteFromFiles(const QStringList &files, int
         QImage image(file);
         Palette palette;
         GetImagePalette(palette, &image);
-        if (palette.size() > 16)
+
+        int const colorCount = ui->Palette_RB_16Mode->isChecked() ? 16 : 256;
+        if (palette.size() > colorCount)
         {
-            QMessageBox::critical(this, "Error", name + ".png has more than 16 colors!", QMessageBox::Ok);
+            QMessageBox::critical(this, "Error", name + ".png has more than " + QString::number(colorCount) + " colors!", QMessageBox::Ok);
             continue;
         }
 
         // Fill the remaining color as black
-        while (palette.size() < 16)
+        while (palette.size() < colorCount)
         {
             palette.push_back(0xFF000000);
         }
@@ -948,6 +989,9 @@ bool CustomSpriteManager::GeneratePaletteFromFiles(const QStringList &files, int
         int const paletteCount = paletteGroup.size();
         if (paletteCount == 1)
         {
+            ui->Palette_RB_16Mode->setEnabled(false);
+            ui->Palette_RB_256Mode->setEnabled(false);
+            ui->Palette_SB_Group->setEnabled(ui->Palette_RB_16Mode->isChecked());
             ui->Palette_SB_Index->setEnabled(true);
             ui->Resources_PB_Add->setEnabled(true);
         }
@@ -1133,7 +1177,7 @@ void CustomSpriteManager::UpdatePalettePreview()
     int group = ui->Palette_SB_Group->value();
     for (int i = 0; i < m_paletteGroups[group].size(); i++)
     {
-        ui->Palette_GV->addPalette(m_paletteGroups[group][i], false);
+        ui->Palette_GV->addPalette(m_paletteGroups[group][i], ui->Palette_RB_256Mode->isChecked());
     }
 
     // Call valueChanged to filter resources
@@ -1148,11 +1192,11 @@ void CustomSpriteManager::EnablePaletteWidgets()
 {
     int group = ui->Palette_SB_Group->value();
     bool editingLayer = !m_editingLayers.empty();
-    ui->Palette_PB_NewGroup->setEnabled(!m_paletteGroups[0].empty() && !editingLayer);
+    ui->Palette_PB_NewGroup->setEnabled(!m_paletteGroups[0].empty() && !editingLayer && ui->Palette_RB_16Mode->isChecked());
     ui->Palette_PB_DelGroup->setEnabled(m_paletteGroups.size() > 1 && !editingLayer);
     ui->Palette_PB_NewPal->setEnabled(m_paletteGroups[group].size() < 256);
     ui->Palette_PB_DelPal->setEnabled(m_paletteGroups[group].size() > 0 && !editingLayer);
-    ui->Palette_SB_Group->setEnabled(!editingLayer);
+    ui->Palette_SB_Group->setEnabled(!editingLayer && ui->Palette_RB_16Mode->isChecked());
     ui->Palette_SB_Index->setEnabled(m_paletteGroups[group].size() > 0 && !editingLayer);
 }
 
@@ -1193,15 +1237,17 @@ void CustomSpriteManager::on_Resources_PB_Add_clicked()
 
         Resource resource;
         GetImagePalette(resource.m_palette, image);
+
+        int const colorCount = ui->Palette_RB_16Mode->isChecked() ? 16 : 256;
         if (resource.m_palette.size() <= 1)
         {
             QMessageBox::critical(this, "Error", name + ".png is completely transparent!", QMessageBox::Ok);
             delete image;
             continue;
         }
-        else if (resource.m_palette.size() > 16)
+        else if (resource.m_palette.size() > colorCount)
         {
-            QMessageBox::critical(this, "Error", name + ".png has more than 16 colors!", QMessageBox::Ok);
+            QMessageBox::critical(this, "Error", name + ".png has more than " + QString::number(colorCount) + " colors!", QMessageBox::Ok);
             delete image;
             continue;
         }
@@ -2699,6 +2745,11 @@ void CustomSpriteManager::on_Build_PB_Sprite_clicked()
     BuildOptionDialog dialog;
     dialog.setEmptyFrame(m_emptyFrame);
     dialog.setEvenOAM(m_evenOAM);
+    if (ui->Palette_RB_256Mode->isChecked())
+    {
+        m_evenOAM = false;
+        dialog.setEvenOAMEnabled(false);
+    }
     dialog.exec();
 
     m_emptyFrame = dialog.getEmptyFrame();
@@ -2864,8 +2915,9 @@ void CustomSpriteManager::on_Build_PB_Sprite_clicked()
             }
         }
 
-        // 255 is the limit!
-        if (tileCount > 255)
+        // Tile limit
+        int tileLimit = (ui->Palette_RB_256Mode->isChecked() || m_evenOAM) ? 2046 : 255;
+        if (tileCount > tileLimit)
         {
             // Find the frame that has this tileset
             int i = 0;
@@ -2879,7 +2931,7 @@ void CustomSpriteManager::on_Build_PB_Sprite_clicked()
 
             ResetBuild();
 
-            QString message = "Frame " + QString::number(i) + " has more than 255 tiles!";
+            QString message = "Frame " + QString::number(i) + " has more than " + QString::number(tileLimit) + " tiles!";
             QMessageBox::critical(this, "Fix it!", message, QMessageBox::Ok);
 
             // Force to goto editing the frame
@@ -3020,12 +3072,25 @@ void CustomSpriteManager::GetRawTilesetData(int tilesetID, std::vector<uint8_t> 
 {
     Tileset const& tileset = m_tilesets[tilesetID];
     data.clear();
-    data.reserve(tileset.m_tileData.size() / 2);
-    for (int i = 0; i < tileset.m_tileData.size() / 2; i++)
+    if (ui->Palette_RB_16Mode->isChecked())
     {
-        char p1 = tileset.m_tileData[i*2];
-        char p2 = tileset.m_tileData[i*2+1];
-        data.push_back(static_cast<uint8_t>(p1 + (p2 << 4)));
+        int size = tileset.m_tileData.size() / 2;
+        data.reserve(size);
+        for (int i = 0; i < size; i++)
+        {
+            char p1 = tileset.m_tileData[i*2];
+            char p2 = tileset.m_tileData[i*2+1];
+            data.push_back(static_cast<uint8_t>(p1 + (p2 << 4)));
+        }
+    }
+    else
+    {
+        int size = tileset.m_tileData.size();
+        data.reserve(size);
+        for (int i = 0; i < size; i++)
+        {
+            data.push_back(tileset.m_tileData[i]);
+        }
     }
 }
 

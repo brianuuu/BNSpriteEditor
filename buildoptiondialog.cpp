@@ -25,6 +25,11 @@ void BuildOptionDialog::setEvenOAM(bool checked)
     ui->CB_EvenOAM->setChecked(checked);
 }
 
+void BuildOptionDialog::setEvenOAMEnabled(bool enabled)
+{
+    ui->CB_EvenOAM->setEnabled(enabled);
+}
+
 bool BuildOptionDialog::getEmptyFrame()
 {
     return ui->CB_EmptyFrame->isChecked();

@@ -163,6 +163,7 @@ public:
     static uint32_t ClampRGB(uint32_t _color);
 
     // Custom Sprite functions
+    void Set256Color(bool _256Color) { m_256ColorMode = _256Color; }
     void ImportCustomTileset(vector<uint8_t> const& _data);
     void ImportCustomFrame();
 

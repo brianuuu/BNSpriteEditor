@@ -1074,6 +1074,17 @@ bool BNSprite::SaveBN
                               + "BN sprite does not support palette index > 15";
                     return false;
                 }
+
+                for (uint32_t d = 0; d < object.m_subObjects.size(); d++)
+                {
+                    SubObject const& subObj = object.m_subObjects[d];
+                    if (subObj.m_startTile > 255)
+                    {
+                        _errorMsg = "Animation " + to_string(a) + " frame " + to_string(b) + " object " + to_string(c) + " OAM " + to_string(d) + ": "
+                                  + "BN sprite does not support OAM with start tile > 255";
+                        return false;
+                    }
+                }
             }
         }
     }

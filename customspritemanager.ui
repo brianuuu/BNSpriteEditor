@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1047</width>
-    <height>934</height>
+    <height>953</height>
    </rect>
   </property>
   <property name="font">
@@ -513,6 +513,27 @@
            <string>Palette List</string>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_19">
+             <item>
+              <widget class="QRadioButton" name="Palette_RB_16Mode">
+               <property name="text">
+                <string>16-Color Mode</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QRadioButton" name="Palette_RB_256Mode">
+               <property name="text">
+                <string>256-Color Mode</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_3">
              <item>

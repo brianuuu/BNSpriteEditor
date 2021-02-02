@@ -9,7 +9,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>397</width>
+    <width>295</width>
     <height>104</height>
    </rect>
   </property>
@@ -32,7 +32,7 @@
    <item>
     <widget class="QCheckBox" name="CB_EvenOAM">
      <property name="text">
-      <string>Reference OAM with Even Numbers (Required by SF Sprites)</string>
+      <string>Build as SF Sprite (Even OAM for 16-Color)</string>
      </property>
     </widget>
    </item>
