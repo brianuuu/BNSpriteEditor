@@ -20,6 +20,7 @@ BNSpriteEditor::BNSpriteEditor(QWidget *parent)
 
     // Load previous path and window size
     this->setWindowTitle(this->windowTitle() + " " + c_programVersion);
+    m_applicationName = this->windowTitle();
     m_settings = new QSettings("brianuuu", "BNSpriteEditor", this);
     m_path = m_settings->value("DefaultDirectory", QString()).toString();
     m_simpleMode = false;
@@ -205,7 +206,7 @@ void BNSpriteEditor::dragEnterEvent(QDragEnterEvent *e)
 void BNSpriteEditor::dropEvent(QDropEvent *e)
 {
     QString file = e->mimeData()->urls()[0].toLocalFile();
-    passArgument(file, true);
+    passArgument(file, false);
 }
 
 //---------------------------------------------------------------------------
@@ -256,7 +257,7 @@ void BNSpriteEditor::on_actionImport_Sprite_triggered()
     QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, IMPORT_EXTENSIONS);
     if (file == Q_NULLPTR) return;
 
-    ImportSprite(file, false, true);
+    ImportSprite(file, false, false);
 }
 
 void BNSpriteEditor::on_actionImport_SF_Sprite_triggered()
@@ -276,7 +277,7 @@ void BNSpriteEditor::on_actionImport_SF_Sprite_triggered()
     QString file = QFileDialog::getOpenFileName(this, tr("Import Sprite"), path, IMPORT_EXTENSIONS_SF);
     if (file == Q_NULLPTR) return;
 
-    ImportSprite(file, true, true);
+    ImportSprite(file, true, false);
 }
 
 void BNSpriteEditor::ImportSprite(QString const& file, bool isSFSprite, bool showSuccess)
@@ -290,8 +291,8 @@ void BNSpriteEditor::ImportSprite(QString const& file, bool isSFSprite, bool sho
 
     // Clear everything we are editing
     ResetProgram();
-    ui->Sprite_Name->setText(file.mid(index + 1));
-    ui->Sprite_Name->setCursorPosition(0);
+    m_spriteName = file.mid(index + 1);
+    this->setWindowTitle(m_applicationName + " (" + m_spriteName + ")");
 
     // Load sprite file
     string errorMsg;
@@ -369,12 +370,18 @@ void BNSpriteEditor::ExportSprite(bool isSFSprite)
         path = m_path;
     }
 
-    QString file = QFileDialog::getSaveFileName(this, tr("Export Sprite"), path + "/" + ui->Sprite_Name->text(), isSFSprite ? EXPORT_EXTENSIONS_SF : EXPORT_EXTENSIONS);
+    QString file = QFileDialog::getSaveFileName(this, tr("Export Sprite"), path + "/" + m_spriteName, isSFSprite ? EXPORT_EXTENSIONS_SF : EXPORT_EXTENSIONS);
     if (file == Q_NULLPTR) return;
 
     // Save directory
     QFileInfo info(file);
     m_path = info.dir().absolutePath();
+
+    // Update name
+    int index = file.lastIndexOf('\\');
+    if (index == -1) index = file.lastIndexOf('/');
+    m_spriteName = file.mid(index + 1);
+    this->setWindowTitle(m_applicationName + " (" + m_spriteName + ")");
 
     // Overwrite palette
     ReplacePaletteInSprite();
@@ -589,9 +596,7 @@ void BNSpriteEditor::on_actionExport_Sprite_as_Single_PNG_triggered()
         path = m_path;
     }
 
-    QString name = ui->Sprite_Name->text();
-    int index = name.lastIndexOf('.');
-    name = name.mid(0, index);
+    QString name = m_spriteName.mid(0, m_spriteName.lastIndexOf('.'));
     QString file = QFileDialog::getSaveFileName(this, tr("Export PNG"), path + "/" + name + ".png", "PNG (*.png)");
     if (file == Q_NULLPTR) return;
 
@@ -878,7 +883,8 @@ void BNSpriteEditor::ResetProgram(bool clearSprite)
 
     if (clearSprite)
     {
-        ui->Sprite_Name->setText("");
+        this->setWindowTitle(m_applicationName);
+        m_spriteName = "";
         m_sprite.Clear();
     }
 }

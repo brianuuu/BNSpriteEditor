@@ -234,10 +234,12 @@ private:
     QSettings *m_settings;
     bool m_simpleMode;
     CustomSpriteManager* m_csm = Q_NULLPTR;
+    QString m_applicationName;
 
     // File
     BNSprite m_sprite;
     BNSprite m_spriteMerge;
+    QString m_spriteName;
     QString m_path;
 
     // Palette

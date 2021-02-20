@@ -1350,7 +1350,7 @@ void CustomSpriteManager::on_Resources_PB_Add_clicked()
         int const addBorderX = (width % 8 == 0) ? 0 : 8 - width % 8;
         int const addBorderY = (height % 8 == 0) ? 0 : 8 - height % 8;
         resource.m_croppedStartPos = QPoint(minX - addBorderX, minY - addBorderY);
-        QSize const croppedSize(width + addBorderX + 7, height + addBorderY + 7);
+        QSize const croppedSize(width + addBorderX + 63, height + addBorderY + 63);
         resource.m_croppedImage = new QImage(image->copy(resource.m_croppedStartPos.x(), resource.m_croppedStartPos.y(), croppedSize.width(), croppedSize.height()));
 
         int const tileXCount = resource.m_croppedImage->width() / 8;
