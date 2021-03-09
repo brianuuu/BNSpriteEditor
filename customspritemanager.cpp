@@ -5,11 +5,12 @@
 #define USE_FIRST_FIT_OAM 0
 
 // Save version
-static const uint32_t c_saveVersion = 4;
+static const uint32_t c_saveVersion = 5;
 // 1: initial save version
 // 2: fix for m_startTile changed from uint8_t to uint16_t
 // 3: added m_evenOAM
 // 4: added 16/256 color mode
+// 5: fix resources image to add 7x7 empty tiles on buttom right
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -297,10 +298,48 @@ void CustomSpriteManager::LoadProject(const QString &file)
         // skipped: m_selectable
 
         in >> resource.m_croppedStartPos;
+        QImage croppedImage;
+        in >> croppedImage;
+
         resource.m_croppedImage = new QImage();
-        in >> *resource.m_croppedImage;
+        if (saveVersion <= 4)
+        {
+            // add back 7x7 empty tiles on bottom right
+            *resource.m_croppedImage = croppedImage.copy(0,0,croppedImage.size().width() + 56,croppedImage.size().height() + 56);
+        }
+        else
+        {
+            *resource.m_croppedImage = croppedImage;
+        }
+
         in >> resource.m_tileStartPos;
-        in >> resource.m_usedTiles;
+
+        QVector<bool> usedTiles;
+        in >> usedTiles;
+        if (saveVersion <= 4)
+        {
+            // add back 7x7 empty tiles on bottom right
+            int const tileXCount = resource.m_croppedImage->width() / 8;
+            int const tileYCount = resource.m_croppedImage->height() / 8;
+            resource.m_usedTiles = QVector<bool>(tileXCount * tileYCount, false);
+
+            int x = 0;
+            int y = 0;
+            for (bool used : usedTiles)
+            {
+                resource.m_usedTiles[y * tileXCount + x] = used;
+                if (++x >= tileXCount - 7)
+                {
+                    x = 0;
+                    y++;
+                }
+            }
+        }
+        else
+        {
+            resource.m_usedTiles = usedTiles;
+        }
+
         in >> resource.m_tileAllowance;
 
         int oamListSize = 0;
@@ -1350,7 +1389,7 @@ void CustomSpriteManager::on_Resources_PB_Add_clicked()
         int const addBorderX = (width % 8 == 0) ? 0 : 8 - width % 8;
         int const addBorderY = (height % 8 == 0) ? 0 : 8 - height % 8;
         resource.m_croppedStartPos = QPoint(minX - addBorderX, minY - addBorderY);
-        QSize const croppedSize(width + addBorderX + 63, height + addBorderY + 63);
+        QSize const croppedSize(width + addBorderX + 63, height + addBorderY + 63); // extra 7x7 empty tiles on bottom right
         resource.m_croppedImage = new QImage(image->copy(resource.m_croppedStartPos.x(), resource.m_croppedStartPos.y(), croppedSize.width(), croppedSize.height()));
 
         int const tileXCount = resource.m_croppedImage->width() / 8;
@@ -1666,9 +1705,10 @@ bool CustomSpriteManager::FindTileUsedCount(const QImage *image, QVector<bool> &
     int const tileXCount = image->width() / 8;
     int const tileYCount = image->height() / 8;
 
-    for (int tileY = 0; tileY < tileYCount; tileY++)
+    // bottom right 7x7 tiles are always empty, don't bother checking
+    for (int tileY = 0; tileY < tileYCount - 7; tileY++)
     {
-        for (int tileX = 0; tileX < tileXCount; tileX++)
+        for (int tileX = 0; tileX < tileXCount - 7; tileX++)
         {
             if (TestTileUsed(image, tileStartPos, tileX, tileY))
             {
@@ -1728,7 +1768,8 @@ void CustomSpriteManager::SampleOAM(Resource &resource)
         for (int oamSize = SIZE_8x8; oamSize >= SIZE_64x64; oamSize--)
         {
             QSize const size = m_oamSizesMap[(OAMSize)oamSize];
-            if (size.width() >= tileXCount && size.height() >= tileYCount)
+            // have to remove the extra 7x7 empty tiles on bottom right, refer on_Resources_PB_Add_clicked()
+            if (size.width() >= tileXCount - 7 && size.height() >= tileYCount - 7)
             {
                 OAMInfo oamInfo;
                 oamInfo.m_oamSize = (OAMSize)oamSize;
@@ -1928,37 +1969,46 @@ QImage CustomSpriteManager::DebugDrawUsedTiles(const QImage *image, const QVecto
 QImage CustomSpriteManager::DebugDrawOAM(const Resource &resource)
 {
     QImage testImage(*resource.m_croppedImage);
-    if (resource.m_forceSingleOAM)
+
+    /*if (resource.m_forceSingleOAM)
     {
+        // Resize the image so the OAM can fit inside
         OAMInfo const& oamInfo = resource.m_oamInfoList[0];
         QSize const size = m_oamSizesMap[oamInfo.m_oamSize] * 8 + QSize(resource.m_tileStartPos.x(), resource.m_tileStartPos.y());
 
         if (size.width() > resource.m_croppedImage->width() || size.height() > resource.m_croppedImage->height())
         {
             testImage = QImage(size, QImage::Format_RGBA8888);
-            for (int y = 0; y < testImage.height(); y++)
-            {
-                for (int x = 0; x < testImage.width(); x++)
-                {
-                    testImage.setPixel(x, y, 0);
-                }
-            }
+            testImage.fill(0);
 
             QPainter painter(&testImage);
             painter.drawImage(0,0,*resource.m_croppedImage);
         }
-    }
+    }*/
 
     QPainter painter(&testImage);
     painter.setPen(QColor(255,0,0,128));
 
+    int minX = INT32_MAX;
+    int minY = INT32_MAX;
+    int maxX = -INT32_MAX;
+    int maxY = -INT32_MAX;
     for (OAMInfo const& oamInfo : resource.m_oamInfoList)
     {
         QSize const size = m_oamSizesMap[oamInfo.m_oamSize];
-        painter.drawRect(oamInfo.m_topLeft.x(), oamInfo.m_topLeft.y(), size.width() * 8 - 1, size.height() * 8 - 1);
+        int x1 = oamInfo.m_topLeft.x();
+        int x2 = x1 + size.width() * 8 - 1;
+        int y1 = oamInfo.m_topLeft.y();
+        int y2 = y1 + size.height() * 8 - 1;
+        painter.drawRect(x1, y1, size.width() * 8 - 1, size.height() * 8 - 1);
+
+        minX = qMin(minX, x1);
+        minY = qMin(minY, y1);
+        maxX = qMax(maxX, x2);
+        maxY = qMax(maxY, y2);
     }
 
-    return testImage;
+    return testImage.copy(minX, minY, maxX - minX + 1, maxY - minY + 1);
 }
 
 //---------------------------------------------------------------------------
