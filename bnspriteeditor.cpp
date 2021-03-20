@@ -7,7 +7,7 @@
 #define EXPORT_EXTENSIONS_SF "Memory Dump (*.bin);;SF Sprite (*.sfsa *.sfsprite);;All files (*.*)"
 #define PALETTE_EXTENSIONS "Palette File (*.pal);;All files (*.*)"
 
-static const QString c_programVersion = "v0.3.2";
+static const QString c_programVersion = "v0.4.0";
 
 //---------------------------------------------------------------------------
 // Constructor
