@@ -2488,11 +2488,11 @@ void CustomSpriteManager::SaveLayer(int replaceID)
         Resource const& resource = m_resources[resourceID];
 
         // use the cropped image to find the minimum size (pos is different if it's flipped)
-        QImage const* image = resource.m_croppedImage;
+        QImage const image = resource.m_croppedImage->copy(0,0,resource.m_croppedImage->width()-56,resource.m_croppedImage->height()-56);
         QPoint topLeft;
         if (layer.m_hFlip)
         {
-            topLeft.setX(layer.m_pos.x() + resource.m_image->width() - resource.m_croppedStartPos.x() - image->width());
+            topLeft.setX(layer.m_pos.x() + resource.m_image->width() - resource.m_croppedStartPos.x() - image.width());
         }
         else
         {
@@ -2500,13 +2500,13 @@ void CustomSpriteManager::SaveLayer(int replaceID)
         }
         if (layer.m_vFlip)
         {
-            topLeft.setY(layer.m_pos.y() + resource.m_image->height() - resource.m_croppedStartPos.y() - image->height());
+            topLeft.setY(layer.m_pos.y() + resource.m_image->height() - resource.m_croppedStartPos.y() - image.height());
         }
         else
         {
             topLeft.setY(layer.m_pos.y() + resource.m_croppedStartPos.y());
         }
-        QPoint bottomRight = topLeft + QPoint(image->width() - 1, image->height() - 1);
+        QPoint bottomRight = topLeft + QPoint(image.width() - 1, image.height() - 1);
 
         minX = qMin(minX, topLeft.x());
         minY = qMin(minY, topLeft.y());
