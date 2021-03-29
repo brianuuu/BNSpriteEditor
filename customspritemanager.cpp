@@ -5,12 +5,13 @@
 #define USE_FIRST_FIT_OAM 0
 
 // Save version
-static const uint32_t c_saveVersion = 5;
+static const uint32_t c_saveVersion = 6;
 // 1: initial save version
 // 2: fix for m_startTile changed from uint8_t to uint16_t
 // 3: added m_evenOAM
 // 4: added 16/256 color mode
 // 5: fix resources image to add 7x7 empty tiles on buttom right
+// 6: added m_OAMSizeEnabled
 
 //---------------------------------------------------------------------------
 // Constructor
@@ -341,6 +342,14 @@ void CustomSpriteManager::LoadProject(const QString &file)
         }
 
         in >> resource.m_tileAllowance;
+        if (saveVersion >= 6)
+        {
+            in >> resource.m_OAMSizeEnabled;
+        }
+        else
+        {
+            resource.setOAMSizeEnabed(true,true,true,true,true);
+        }
 
         int oamListSize = 0;
         in >> oamListSize;
@@ -493,6 +502,7 @@ void CustomSpriteManager::on_actionSave_Project_triggered()
         out << resource.m_tileStartPos;
         out << resource.m_usedTiles;
         out << resource.m_tileAllowance;
+        out << resource.m_OAMSizeEnabled;
 
         out << resource.m_oamInfoList.size();
         for (OAMInfo const& info : resource.m_oamInfoList)
@@ -608,6 +618,11 @@ void CustomSpriteManager::ResetOAM()
     ui->Resources_SB_16->setEnabled(false);
     ui->Resources_SB_8->setEnabled(false);
     ui->Resources_SB_4->setEnabled(false);
+    ui->Resources_CB_64->setEnabled(false);
+    ui->Resources_CB_32->setEnabled(false);
+    ui->Resources_CB_16->setEnabled(false);
+    ui->Resources_CB_8->setEnabled(false);
+    ui->Resources_CB_4->setEnabled(false);
     ui->Resources_CB_SingleOAM->setEnabled(false);
 }
 
@@ -1400,9 +1415,9 @@ void CustomSpriteManager::on_Resources_PB_Add_clicked()
         // Test 64 positions to see which uses the least amount of tiles
         // UPDATE: Only need to test added border + 1 (e.g. if image is 8x8 there's not need to test other than [0,0])
         int minUsedTileCount = INT32_MAX;
-        for (int sampleY = 0; sampleY < addBorderY + 1; sampleY++)
+        for (int sampleY = addBorderY; sampleY >= 0; sampleY--)
         {
-            for (int sampleX = 0; sampleX < addBorderX + 1; sampleX++)
+            for (int sampleX = addBorderX; sampleX >= 0; sampleX--)
             {
                 if (FindTileUsedCount(resource.m_croppedImage, testTiles, minUsedTileCount, QPoint(sampleX, sampleY)))
                 {
@@ -1509,6 +1524,11 @@ void CustomSpriteManager::on_Resources_LW_currentItemChanged(QListWidgetItem *cu
     ui->Resources_SB_16->blockSignals(true);
     ui->Resources_SB_8->blockSignals(true);
     ui->Resources_SB_4->blockSignals(true);
+    ui->Resources_CB_64->blockSignals(true);
+    ui->Resources_CB_32->blockSignals(true);
+    ui->Resources_CB_16->blockSignals(true);
+    ui->Resources_CB_8->blockSignals(true);
+    ui->Resources_CB_4->blockSignals(true);
     ui->Resources_CB_SingleOAM->blockSignals(true);
     Resource const& resource = m_resources[resourceID];
     GetResourceAllowance(resource);
@@ -1517,15 +1537,25 @@ void CustomSpriteManager::on_Resources_LW_currentItemChanged(QListWidgetItem *cu
     ui->Resources_SB_16->blockSignals(false);
     ui->Resources_SB_8->blockSignals(false);
     ui->Resources_SB_4->blockSignals(false);
+    ui->Resources_CB_64->blockSignals(false);
+    ui->Resources_CB_32->blockSignals(false);
+    ui->Resources_CB_16->blockSignals(false);
+    ui->Resources_CB_8->blockSignals(false);
+    ui->Resources_CB_4->blockSignals(false);
     ui->Resources_CB_SingleOAM->blockSignals(false);
 
     // Buttons
     ui->Resources_PB_Delete->setEnabled(true);
-    ui->Resources_SB_64->setEnabled(!resource.m_forceSingleOAM);
-    ui->Resources_SB_32->setEnabled(!resource.m_forceSingleOAM);
-    ui->Resources_SB_16->setEnabled(!resource.m_forceSingleOAM);
-    ui->Resources_SB_8->setEnabled(!resource.m_forceSingleOAM);
-    ui->Resources_SB_4->setEnabled(!resource.m_forceSingleOAM);
+    ui->Resources_SB_64->setEnabled(!resource.m_forceSingleOAM && ui->Resources_CB_64->isChecked());
+    ui->Resources_SB_32->setEnabled(!resource.m_forceSingleOAM && ui->Resources_CB_32->isChecked());
+    ui->Resources_SB_16->setEnabled(!resource.m_forceSingleOAM && ui->Resources_CB_16->isChecked());
+    ui->Resources_SB_8->setEnabled(!resource.m_forceSingleOAM && ui->Resources_CB_8->isChecked());
+    ui->Resources_SB_4->setEnabled(!resource.m_forceSingleOAM && ui->Resources_CB_4->isChecked());
+    ui->Resources_CB_64->setEnabled(!resource.m_forceSingleOAM);
+    ui->Resources_CB_32->setEnabled(!resource.m_forceSingleOAM);
+    ui->Resources_CB_16->setEnabled(!resource.m_forceSingleOAM);
+    ui->Resources_CB_8->setEnabled(!resource.m_forceSingleOAM);
+    ui->Resources_CB_4->setEnabled(!resource.m_forceSingleOAM);
     ui->Resources_CB_SingleOAM->setEnabled(true);
 
     UpdateDrawOAMSample();
@@ -1587,16 +1617,51 @@ void CustomSpriteManager::on_Resources_SB_4_valueChanged(int arg1)
     UpdateDrawOAMSample();
 }
 
+void CustomSpriteManager::on_Resources_CB_64_toggled(bool checked)
+{
+    ui->Resources_SB_64->setEnabled(checked);
+    UpdateDrawOAMSample();
+}
+
+void CustomSpriteManager::on_Resources_CB_32_toggled(bool checked)
+{
+    ui->Resources_SB_32->setEnabled(checked);
+    UpdateDrawOAMSample();
+}
+
+void CustomSpriteManager::on_Resources_CB_16_toggled(bool checked)
+{
+    ui->Resources_SB_16->setEnabled(checked);
+    UpdateDrawOAMSample();
+}
+
+void CustomSpriteManager::on_Resources_CB_8_toggled(bool checked)
+{
+    ui->Resources_SB_8->setEnabled(checked);
+    UpdateDrawOAMSample();
+}
+
+void CustomSpriteManager::on_Resources_CB_4_toggled(bool checked)
+{
+    ui->Resources_SB_4->setEnabled(checked);
+    UpdateDrawOAMSample();
+}
+
 void CustomSpriteManager::on_Resources_CB_SingleOAM_toggled(bool checked)
 {
     UpdateDrawOAMSample();
 
     // Might be reverted, can just use the bool "checked"
-    ui->Resources_SB_64->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
-    ui->Resources_SB_32->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
-    ui->Resources_SB_16->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
-    ui->Resources_SB_8->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
-    ui->Resources_SB_4->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
+    ui->Resources_SB_64->setEnabled(!ui->Resources_CB_SingleOAM->isChecked() && ui->Resources_CB_64->isChecked());
+    ui->Resources_SB_32->setEnabled(!ui->Resources_CB_SingleOAM->isChecked() && ui->Resources_CB_32->isChecked());
+    ui->Resources_SB_16->setEnabled(!ui->Resources_CB_SingleOAM->isChecked() && ui->Resources_CB_16->isChecked());
+    ui->Resources_SB_8->setEnabled(!ui->Resources_CB_SingleOAM->isChecked() && ui->Resources_CB_8->isChecked());
+    ui->Resources_SB_4->setEnabled(!ui->Resources_CB_SingleOAM->isChecked() && ui->Resources_CB_4->isChecked());
+    ui->Resources_CB_64->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
+    ui->Resources_CB_32->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
+    ui->Resources_CB_16->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
+    ui->Resources_CB_8->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
+    ui->Resources_CB_4->setEnabled(!ui->Resources_CB_SingleOAM->isChecked());
 }
 
 //---------------------------------------------------------------------------
@@ -1611,6 +1676,7 @@ void CustomSpriteManager::SetResourceAllowance(CustomSpriteManager::Resource &re
                               ui->Resources_SB_Default16->value(),
                               ui->Resources_SB_Default8->value(),
                               ui->Resources_SB_Default4->value());
+        resource.setOAMSizeEnabed(true, true, true, true, true);
         resource.m_forceSingleOAM = false;
     }
     else
@@ -1620,6 +1686,11 @@ void CustomSpriteManager::SetResourceAllowance(CustomSpriteManager::Resource &re
                               ui->Resources_SB_16->value(),
                               ui->Resources_SB_8->value(),
                               ui->Resources_SB_4->value());
+        resource.setOAMSizeEnabed(ui->Resources_CB_64->isChecked(),
+                                  ui->Resources_CB_32->isChecked(),
+                                  ui->Resources_CB_16->isChecked(),
+                                  ui->Resources_CB_8->isChecked(),
+                                  ui->Resources_CB_4->isChecked());
         resource.m_forceSingleOAM = ui->Resources_CB_SingleOAM->isChecked();
     }
 }
@@ -1635,6 +1706,12 @@ void CustomSpriteManager::GetResourceAllowance(const CustomSpriteManager::Resour
     ui->Resources_SB_16->setValue(allowances[2]);
     ui->Resources_SB_8->setValue(allowances[3]);
     ui->Resources_SB_4->setValue(allowances[4]);
+    QVector<bool> const& enabled = resource.m_OAMSizeEnabled;
+    ui->Resources_CB_64->setChecked(enabled[0]);
+    ui->Resources_CB_32->setChecked(enabled[1]);
+    ui->Resources_CB_16->setChecked(enabled[2]);
+    ui->Resources_CB_8->setChecked(enabled[3]);
+    ui->Resources_CB_4->setChecked(enabled[4]);
     ui->Resources_CB_SingleOAM->setChecked(resource.m_forceSingleOAM);
 }
 
@@ -1795,6 +1872,9 @@ void CustomSpriteManager::SampleOAM(Resource &resource)
     {
         QSize const size = m_oamSizesMap[(OAMSize)oamSize];
         if (size.width() > tileXCount || size.height() > tileYCount) continue;
+
+        // Check if we are allow to use this OAM?
+        if (!resource.getOAMSizeEnabed((OAMSize)oamSize)) continue;
 
 #if USE_FIRST_FIT_OAM
         //-----------------------------------------------------------------

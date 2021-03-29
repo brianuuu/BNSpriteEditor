@@ -94,6 +94,7 @@ private:
         QPoint m_tileStartPos;
         QVector<bool> m_usedTiles;
         QVector<int> m_tileAllowance;
+        QVector<bool> m_OAMSizeEnabled;
         QVector<OAMInfo> m_oamInfoList;
         int m_tileCount;
         bool m_forceSingleOAM;
@@ -101,6 +102,7 @@ private:
         Resource()
         {
             m_tileAllowance = QVector<int>(5, 0);
+            m_OAMSizeEnabled = QVector<bool>(5, true);
         }
 
         Resource(int _64, int _32, int _16, int _8, int _4)
@@ -138,6 +140,39 @@ private:
                 return m_tileAllowance[4];
             default:
                 return 0;
+            }
+        }
+
+        void setOAMSizeEnabed(bool _64, bool _32, bool _16, bool _8, int _4)
+        {
+            m_OAMSizeEnabled.clear();
+            m_OAMSizeEnabled.push_back(_64);
+            m_OAMSizeEnabled.push_back(_32);
+            m_OAMSizeEnabled.push_back(_16);
+            m_OAMSizeEnabled.push_back(_8);
+            m_OAMSizeEnabled.push_back(_4);
+        }
+
+        int getOAMSizeEnabed(OAMSize oamSize)
+        {
+            switch (oamSize)
+            {
+            case SIZE_64x64:
+                return m_OAMSizeEnabled[0];
+            case SIZE_64x32:
+            case SIZE_32x64:
+                return m_OAMSizeEnabled[1];
+            case SIZE_32x32:
+                return m_OAMSizeEnabled[2];
+            case SIZE_32x16:
+            case SIZE_16x32:
+                return m_OAMSizeEnabled[3];
+            case SIZE_16x16:
+            case SIZE_32x8:
+            case SIZE_8x32:
+                return m_OAMSizeEnabled[4];
+            default:
+                return true;
             }
         }
 
@@ -210,6 +245,11 @@ private slots:
     void on_Resources_SB_16_valueChanged(int arg1);
     void on_Resources_SB_8_valueChanged(int arg1);
     void on_Resources_SB_4_valueChanged(int arg1);
+    void on_Resources_CB_64_toggled(bool checked);
+    void on_Resources_CB_32_toggled(bool checked);
+    void on_Resources_CB_16_toggled(bool checked);
+    void on_Resources_CB_8_toggled(bool checked);
+    void on_Resources_CB_4_toggled(bool checked);
     void on_Resources_CB_SingleOAM_toggled(bool checked);
 
     // Preview
